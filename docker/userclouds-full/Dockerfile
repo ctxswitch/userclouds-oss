@@ -1,72 +1,115 @@
-# see https://hub.docker.com/_/debian/tags
-FROM debian:12.10@sha256:00cd074b40c4d99ff0c24540bdde0533ca3791edcdac0de36d6b9fb3260d89e2
+###
+### Service Builder
+###
+FROM golang:1.24-bookworm@sha256:3ce988c30fa67dc966ca716ee0ce7ad08d7330573e808cb68ada7e419bdf23de AS service-builder
 
-RUN apt update && apt install gnupg2 lsb-release ca-certificates -y
-# Adding the hashicorp apt repo - see https://developer.hashicorp.com/terraform/install (linux)
-COPY docker/userclouds-common/hashicorp.asc /tmp/hashicorp.asc
-RUN gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg /tmp/hashicorp.asc && \
-    rm /tmp/hashicorp.asc && \
-    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list && \
-    apt update && apt install terraform -y
+WORKDIR /usr/src/app
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Adding the current UserClouds repo git hash (plus date and time) as a label.
-# To inspect use: docker image inspect --format='{{json .Config.Labels}}' userclouds/docker:latest
-ARG CURRENT_REPO_VERSION
-LABEL userclouds.version="$CURRENT_REPO_VERSION"
+COPY . .
+RUN make build-deploy-binaries
+
+###
+### UI Builder
+###
+FROM node:22.5.1-bookworm-slim@sha256:2fb92fe9d7350866a73c5cc311c1a19919ffd47e8592d4233374ee330e3bdb1e AS console-builder
+
+ENV PATH=/root/.local/bin:$PATH
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+WORKDIR /userclouds
+
+RUN : \
+    && apt-get update \
+    && apt install curl build-essential -y \
+    && :
+
+COPY console console
+COPY plex plex
+COPY sharedui sharedui
+COPY ui-component-lib ui-component-lib
+COPY *.lock .
+COPY *.json .
+COPY eslint.config.mjs .
+COPY pyproject.toml .
+
+RUN : \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && uv python install 3.12 \
+    && npm install -g corepack \
+    && yarn config set nodeLinker node-modules \
+    && uv run yarn install --immutable \
+    && yarn sharedui:build \
+    && yarn ui-lib:build \
+    && yarn consoleui:build \
+    && yarn plexui:build \
+    && :
+
+###
+### Release image
+###
+FROM debian:bookworm-slim@sha256:df52e55e3361a81ac1bead266f3373ee55d29aa50cf0975d440c2be3483d8ed3
+
+ENV PATH=/userclouds/bin:$PATH
+ENV UC_CONFIG_DIR=/userclouds/config/
+ENV UC_UNIVERSE=container
+ENV UC_REGION=customerlocal
+ENV UC_CONFIG_MANIFEST_FILE=""
+
+RUN : \
+    && apt update \
+    && apt install gnupg2 lsb-release ca-certificates -y \
+    && :
 
 # Copy binaries
-COPY bin/linux-amd64/. /userclouds/bin/
+COPY --from=service-builder /usr/src/app/bin/. /userclouds/bin/
 
-# Copy UI assets
-COPY console/consoleui/build console/consoleui/build
-COPY plex/plexui/build plex/plexui/build
+# Copy UI components
+COPY --from=console-builder /userclouds/console/consoleui/build console/consoleui/build
+COPY --from=console-builder /userclouds/plex/plexui/build plex/plexui/build
 
 # Copy config files
+# TODO: get rid of this..
 COPY config/rootdb/container.yaml /userclouds/config/rootdb/
 COPY config/idp/container.yaml /userclouds/config/idp/
 COPY config/authz/container.yaml /userclouds/config/authz/
 COPY config/plex/container.yaml /userclouds/config/plex/
 COPY config/console/container.yaml /userclouds/config/console/
 COPY config/logserver/container.yaml /userclouds/config/logserver/
-COPY config/logserver/base.yaml /userclouds/config/logserver/
 COPY config/worker/container.yaml /userclouds/config/worker/
-COPY config/worker/base.yaml /userclouds/config/worker/
 COPY config/base_container.yaml /userclouds/config/
 
-# process routing config file, used by cmd/containerrunner
-COPY docker/userclouds-full/routing.yaml /userclouds/
-
-# Needed for migrations...
+# For config for migrations
 COPY config/rootdbstatus/container.yaml /userclouds/config/rootdbstatus/
 
+# TODO: do I actually need this?
+# process routing config file, used by cmd/containerrunner
+# COPY docker/userclouds-full/routing.yaml /userclouds/
+
 ## provisioning files
-COPY config/provisioning/dev/company.json /userclouds/provisioning/
-COPY config/provisioning/container/tenant_console.json /userclouds/provisioning/tenant_console.json
-COPY config/provisioning/samples/company_uc_container_dev.json /userclouds/provisioning/
-COPY config/provisioning/samples/tenant_uc_container_dev.json /userclouds/provisioning/
-COPY docker/userclouds-full/run-uc.sh /userclouds/bin/
+COPY config/provisioning/dev/company.json /userclouds/provisioning/company.json
+COPY config/provisioning/dev/tenant_console.json /userclouds/provisioning/tenant_console.json
+
+COPY docker/userclouds-services/run-uc.sh /userclouds/bin/
 RUN chmod +x /userclouds/bin/run-uc.sh
 
-RUN mkdir -p /userclouds/logs/
-VOLUME /userclouds/logs/
+RUN : \
+    && groupadd --gid 99 userclouds \
+    && useradd -m --no-log-init --uid 99 --gid 99 userclouds \
+    && chown userclouds:userclouds /userclouds/bin \
+    && chmod u=rx,go=rx /userclouds/bin \
+    && chown userclouds:userclouds /userclouds/provisioning \
+    && chmod u=r,go=r /userclouds/provisioning/*.json \
+    && chown userclouds:userclouds /userclouds/config \
+    && chmod --recursive u=r,go=r /userclouds/config/*.yaml \
+    && :
 
-RUN groupadd --gid 99 userclouds && useradd -m --no-log-init --uid 99 --gid 99 userclouds && \
-    chown userclouds:userclouds /userclouds/bin && chmod u=rx,go=rx  /userclouds/bin && \
-    chown -R userclouds:userclouds /userclouds/logs && chmod --recursive u=rwx,go=rwx  /userclouds/logs && \
-    chown userclouds:userclouds /userclouds/provisioning && chmod u=r,go=r  /userclouds/provisioning/*.json && \
-    chown userclouds:userclouds /userclouds/config && chmod --recursive u=r,go=r /userclouds/config/*.yaml
+RUN : \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && :
 
 USER userclouds:userclouds
-
-######
-ENV PATH=/userclouds/bin:$PATH
-ENV UC_CONFIG_DIR=/userclouds/config/
-ENV UC_UNIVERSE=container
-# using a dev region in container env
-ENV UC_REGION=mars
 EXPOSE 3040
-
-ENV UC_CONFIG_MANIFEST_FILE=""
-# Where customer will mount the ucconfig manifest file
-VOLUME /customer/config/
 CMD ["/userclouds/bin/run-uc.sh"]

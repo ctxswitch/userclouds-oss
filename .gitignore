@@ -46,9 +46,12 @@ yarn-error.log*
 .npm
 .eslintcache
 .rollup.cache
+.pnp.*
+.yarn
 
 # Editor specific
 .history
+.idea
 
 # Python
 *.pyc
@@ -76,3 +79,6 @@ terragrunt_generated__*.tf
 .k8s-manifests/
 
 **/.yarn/*
+
+# Go
+vendor

@@ -1,0 +1,223 @@
+region: customerlocal
+universe: ""
+domain: {{ .Release.Namespace }}.svc.cluster.local
+company_id: "1ee4497e-c326-4068-94ed-3dcdaaaa53bc"
+#-- TODO: we can probably replace this with a generated url...
+console_tenant_id: "41ab79a8-0dff-418e-9d42-e1694469120a"
+
+#-- Only enabled in a single region.
+enableCronJobs: false
+
+# Change to termination grace seconds.
+preStopSleepSeconds: 15
+
+#-- Plex service
+plex:
+  replicas: 1
+  # pdb:
+  #   minAvailable: 2
+  resources:
+    limits:
+      cpu: 0.5
+      memory: 256Mi
+    requests:
+      cpu: 0.4
+      memory: 128Mi
+
+userstore:
+  replicas: 1
+  # pdb:
+  #   minAvailable: 2
+  resources:
+    limits:
+      cpu: 0.5
+      memory: 256Mi
+    requests:
+      cpu: 0.4
+      memory: 128Mi
+
+#-- Console service
+console:
+  replicas: 1
+  # pdb:
+  #   minAvailable: 2
+  resources:
+    limits:
+      cpu: 0.5
+      memory: 256Mi
+    requests:
+      cpu: 0.4
+      memory: 128Mi
+
+#-- Logserver service
+logserver:
+  replicas: 1
+  # pdb:
+  #   minAvailable: 2
+  resources:
+    limits:
+      cpu: 0.5
+      memory: 256Mi
+    requests:
+      cpu: 0.4
+      memory: 128Mi
+
+#-- Authz service
+authz:
+  replicas: 1
+  # pdb:
+  #   minAvailable: 2
+  resources:
+    limits:
+      cpu: 0.5
+      memory: 256Mi
+    requests:
+      cpu: 0.4
+      memory: 128Mi
+
+#-- Checkattributes service
+checkattribute:
+  enabled: true
+  replicas: 1
+  # pdb:
+  #   minAvailable: 2
+  #-- TODO: figure out what this is for.
+  deployments:
+    - name: envtest
+      replicas: 1
+      resources:
+        limits:
+          cpu: 0.5
+          memory: 256Mi
+        requests:
+          cpu: 0.4
+          memory: 128Mi
+
+config:
+  #-- Authz service configuration
+  authz:
+    svc_listener:
+      protocol: http
+      host: localhost
+      port: 5100
+    console_tenant_id: {{ tpl (.Values.console_tenant_id) $ }}
+
+  #-- Base
+  base:
+    company_db: # Using postgres in container env, user/pw must match docker/userclouds-headless/docker-compose.yaml
+      user: uc_root_user
+      password: dev-literal://uc87871fakepw
+      dbname: companyconfig
+      host: postgres
+      dbdriver: postgres
+      dbproduct: postgres
+      port: 5432
+    internal_server: null
+    logger:
+      transports:
+        - type: file
+          base_filename: /userclouds/logs/
+          transportconfig:
+            required: true
+            max_log_level: 5
+        - type: goLogJSON
+          transportconfig:
+            required: true
+            max_log_level: 5
+
+  #-- Checkattribute service configuration
+  checkattribute:
+    svc_listener:
+      protocol: http
+      host: localhost
+      port: 5210
+    console_tenant_id: {{ tpl (.Values.console_tenant_id) $ }}
+
+  #-- Console service configuration
+  console:
+    static_assets_path: /userclouds/uiassets/console/
+    console_url: {{ include "userclouds.console.url" $ }}
+    log_db:
+      user: uc_root_user
+      password: dev-literal://uc87871fakepw
+      dbname: status_fake
+      host: postgres
+      dbdriver: postgres
+      dbproduct: postgres
+      port: 5432
+    svc_listener:
+      protocol: http
+      host: localhost
+      port: 5300
+    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+    tenant_sub_domain: tenant.{{ tpl (.Values.domain) . }}
+    tenant_protocol: http
+    worker_client:
+      type: http
+      url: http://localhost:3012
+
+  #-- IDP service configuration
+  idp:
+    svc_listener:
+      protocol: http
+      host: localhost
+      port: 5100
+    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+
+  #-- Logserver configuration
+  logserver:
+    log_db:
+      user: uc_root_user
+      password: dev-literal://uc87871fakepw
+      dbname: status_00000000000000000000000000000000
+      host: postgres
+      dbdriver: postgres
+      dbproduct: postgres
+      port: 5432
+    svc_listener:
+      protocol: http
+      host: localhost
+      port: 5500
+    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+
+  #-- Plex configuration
+  plex:
+    static_assets_path: /userclouds/uiassets/plex/
+    svc_listener:
+      protocol: http
+      host: 0.0.0.0
+      port: 5000
+    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+    disable_email: true
+
+  #-- Root database configuration
+  rootdb:
+    db:
+      user: uc_root_user
+      password: dev-literal://uc87871fakepw
+      dbname: defaultdb
+      host: postgres
+      dbdriver: postgres
+      dbproduct: postgres
+      port: 5432
+
+  #-- Worker configuration
+  worker:
+    log_db:
+      user: uc_root_user
+      password: dev-literal://uc87871fakepw
+      dbname: status_00000000000000000000000000000000
+      host: postgres
+      dbdriver: postgres
+      dbproduct: postgres
+      port: 5432
+    svc_listener:
+      protocol: http
+      host: localhost
+      port: 3012
+    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+    dns:
+      host_and_port: 1.1.1.1:53
+    worker_client:
+      type: http
+      url: http://localhost:3012

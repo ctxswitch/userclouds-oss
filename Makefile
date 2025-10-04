@@ -315,6 +315,100 @@ consoleui-test: ## Run the tests for 'consoleui'
 ui-dev: ## Run the dev backend + react dev server for plex & console
 	tmux new-session "tmux source-file tools/tmux-uidev.cmd"
 
+bin/containerrunner: $(_GO_SRCS)
+	go build -o $@ ./cmd/containerrunner
+
+tools: bin/goimports
+bin/goimports: .go-version go.mod
+	go install -mod=readonly golang.org/x/tools/cmd/goimports
+
+tools: bin/modernize
+bin/modernize: .go-version go.mod
+	go install -mod=readonly golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.18.0
+
+tools: bin/shfmt
+# When upgrading shfmt, make sure to update the version the cache key in .github/workflows/lint-shell.yml
+bin/shfmt: .go-version go.mod
+	go install -mod=readonly mvdan.cc/sh/v3/cmd/shfmt@v3.11.0
+
+# Note that in CI, we untar shellcheck directly into bin/ so we don't polute our git porcelain status :)
+tools: bin/shellcheck
+bin/shellcheck:
+ifeq ($(_LOCAL_PLATFORM), darwin)
+	shellcheck --version || brew install shellcheck
+	ln -s $$(which shellcheck) bin/shellcheck
+else ifeq ($(_LOCAL_PLATFORM), linux)
+	tools/install-shellcheck-linux.sh
+else
+	$(error "Don't know how to download shellcheck on $(_LOCAL_PLATFORM)")
+endif
+
+tools: bin/staticcheck
+bin/staticcheck: .go-version go.mod
+	go install -mod=readonly honnef.co/go/tools/cmd/staticcheck@2025.1.1
+
+tools: bin/revive
+bin/revive: .go-version go.mod
+	go install -mod=readonly github.com/mgechev/revive
+
+tools: bin/errcheck
+bin/errcheck: .go-version go.mod
+	go install -mod=readonly github.com/kisielk/errcheck
+
+tools: bin/uclint
+bin/uclint: $(_GO_SRCS)
+	go build -o $@ userclouds.com/cmd/uclint
+
+tools:bin/migrate
+bin/migrate: $(_GO_SRCS)
+	go build -o bin/migrate ./cmd/migrate
+
+tools: bin/provision
+bin/provision: $(_GO_SRCS)
+	go build -o bin/provision ./cmd/provision
+
+tools: bin/tenantdbshell
+bin/tenantdbshell: $(_GO_SRCS)
+	go build -o bin/tenantdbshell ./cmd/tenantdbshell
+
+tools: bin/queryrunner
+bin/queryrunner: $(_GO_SRCS)
+	go build -o bin/queryrunner ./cmd/queryrunner
+
+tools: bin/dataimport
+bin/dataimport: $(_GO_SRCS)
+	go build -o bin/dataimport ./cmd/dataimport
+
+tools: bin/cleanupusercolumns
+bin/cleanupusercolumns: $(_GO_SRCS)
+	go build -o bin/cleanupusercolumns ./cmd/cleanupusercolumns
+
+tools: bin/uclog
+bin/uclog: $(_GO_SRCS)
+	go build -o bin/uclog ./cmd/uclog
+
+tools: bin/testdevcert
+bin/testdevcert: $(_GO_SRCS)
+	go build -o bin/testdevcert ./cmd/testdevcert
+
+tools: bin/consoleuiinitdata
+bin/consoleuiinitdata: $(_GO_SRCS)
+	go build -o bin/consoleuiinitdata ./cmd/consoleuiinitdata
+
+tools: bin/runaccessors
+bin/runaccessors: $(_GO_SRCS)
+	go build -o bin/runaccessors ./cmd/runaccessors
+
+tools: bin/envtestecs
+bin/envtestecs: $(_GO_SRCS)
+	go build -o bin/envtestecs ./cmd/envtestecs
+
+bin/auditlogview: $(_GO_SRCS)
+	go build -o bin/auditlogview ./cmd/auditlogview
+
+bin/remoteuserregionconfig: $(_GO_SRCS)
+	go build -o bin/remoteuserregionconfig ./cmd/remoteuserregionconfig
+
 #.PHONY: devsetup
 #devsetup: bin/testdevcert check_venv install-tools
 #devsetup: ## Initial setup when you clone the repo

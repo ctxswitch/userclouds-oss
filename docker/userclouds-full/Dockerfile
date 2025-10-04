@@ -66,32 +66,13 @@ RUN : \
 COPY --from=service-builder /usr/src/app/bin/. /userclouds/bin/
 
 # Copy UI components
-COPY --from=console-builder /userclouds/console/consoleui/build console/consoleui/build
-COPY --from=console-builder /userclouds/plex/plexui/build plex/plexui/build
+COPY --from=console-builder /userclouds/console/consoleui/build/* /userclouds/uiassets/console/
+COPY --from=console-builder /userclouds/plex/plexui/build/* /userclouds/uiassets/plex/
 
-# Copy config files
-# TODO: get rid of this..
-COPY config/rootdb/container.yaml /userclouds/config/rootdb/
-COPY config/idp/container.yaml /userclouds/config/idp/
-COPY config/authz/container.yaml /userclouds/config/authz/
-COPY config/plex/container.yaml /userclouds/config/plex/
-COPY config/console/container.yaml /userclouds/config/console/
-COPY config/logserver/container.yaml /userclouds/config/logserver/
-COPY config/worker/container.yaml /userclouds/config/worker/
-COPY config/base_container.yaml /userclouds/config/
+COPY docker/userclouds-full/config/provisioning/company.json /userclouds/provisioning/company.json
+COPY docker/userclouds-full/config/provisioning/tenant_console.json /userclouds/provisioning/tenant_console.json
 
-# For config for migrations
-COPY config/rootdbstatus/container.yaml /userclouds/config/rootdbstatus/
-
-# TODO: do I actually need this?
-# process routing config file, used by cmd/containerrunner
-# COPY docker/userclouds-full/routing.yaml /userclouds/
-
-## provisioning files
-COPY config/provisioning/dev/company.json /userclouds/provisioning/company.json
-COPY config/provisioning/dev/tenant_console.json /userclouds/provisioning/tenant_console.json
-
-COPY docker/userclouds-services/run-uc.sh /userclouds/bin/
+COPY docker/userclouds-full/run-uc.sh /userclouds/bin/
 RUN chmod +x /userclouds/bin/run-uc.sh
 
 RUN : \
@@ -101,8 +82,9 @@ RUN : \
     && chmod u=rx,go=rx /userclouds/bin \
     && chown userclouds:userclouds /userclouds/provisioning \
     && chmod u=r,go=r /userclouds/provisioning/*.json \
+    && mkdir -p /userclouds/config \
     && chown userclouds:userclouds /userclouds/config \
-    && chmod --recursive u=r,go=r /userclouds/config/*.yaml \
+    && chown -R userclouds:userclouds /userclouds/uiassets \
     && :
 
 RUN : \

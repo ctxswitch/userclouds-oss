@@ -159,18 +159,7 @@ func InitServer(ctx context.Context, args InitServerArgs) (Server, error) {
 			closersFuncs = append(closersFuncs, closeTracing)
 		}
 	}
-	uv := universe.Current()
-	if uv.IsCloud() {
-		if err := cache.InitRedisCertForCloud(); err != nil {
-			return Server{}, ucerr.Wrap(err)
-		}
-	} else if uv.IsOnPrem() {
-		// In on prem, redis runs locally in the cluster, but may not be available yet when the UC service starts,so we wait for it to be available.
-		// if it is not available, we will fail the service start (crashes the pod/container) which will cause k8s to retry.
-		if err := waitForRedis(ctx, args.CacheConfig); err != nil {
-			return Server{}, ucerr.Wrap(err)
-		}
-	}
+
 	srv := Server{
 		service:             args.Service,
 		serviceInstanceName: args.ServiceInstanceName,

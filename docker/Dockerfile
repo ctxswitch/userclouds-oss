@@ -8,7 +8,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN make build-deploy-binaries
+RUN make bin/userclouds
 
 ###
 ### UI Builder
@@ -62,6 +62,8 @@ RUN : \
     && apt install gnupg2 lsb-release ca-certificates -y \
     && :
 
+COPY config/userclouds /userclouds/config
+
 # Copy binaries
 COPY --from=service-builder /usr/src/app/bin/. /userclouds/bin/
 
@@ -69,22 +71,14 @@ COPY --from=service-builder /usr/src/app/bin/. /userclouds/bin/
 COPY --from=console-builder /userclouds/console/consoleui/build/* /userclouds/uiassets/console/
 COPY --from=console-builder /userclouds/plex/plexui/build/* /userclouds/uiassets/plex/
 
-COPY docker/config/provisioning/company.json /userclouds/provisioning/company.json
-COPY docker/config/provisioning/tenant_console.json /userclouds/provisioning/tenant_console.json
-
-COPY docker/run-uc.sh /userclouds/bin/
-RUN chmod +x /userclouds/bin/run-uc.sh
-
 RUN : \
     && groupadd --gid 99 userclouds \
     && useradd -m --no-log-init --uid 99 --gid 99 userclouds \
     && chown userclouds:userclouds /userclouds/bin \
-    && chmod u=rx,go=rx /userclouds/bin \
-    && chown userclouds:userclouds /userclouds/provisioning \
-    && chmod u=r,go=r /userclouds/provisioning/*.json \
-    && mkdir -p /userclouds/config \
-    && chown userclouds:userclouds /userclouds/config \
+    && chown -R userclouds:userclouds /userclouds/config \
     && chown -R userclouds:userclouds /userclouds/uiassets \
+    && chmod u=r,go=r /userclouds/config/provisioning/*.json \
+    && chmod u=rx,go=rx /userclouds/bin \
     && :
 
 RUN : \
@@ -94,4 +88,4 @@ RUN : \
 
 USER userclouds:userclouds
 EXPOSE 3040
-CMD ["/userclouds/bin/run-uc.sh"]
+CMD ["/userclouds/bin/userclouds"]

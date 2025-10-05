@@ -215,6 +215,13 @@ log-debug: bin/uclog
 	bin/uclog --time 5 --streamname debug --live --verbose --outputpref sh --interactive --summary listlog
 
 ######################### service binaries ##########################
+bin/userclouds: $(_GO_SRCS)
+	go build --trimpath -o $@ \
+    		-ldflags \
+    			"-s -w -X userclouds.com/infra/service.buildHash=$(shell git rev-parse HEAD) \
+    			 -X userclouds.com/infra/service.buildTime=$(shell TZ=UTC git show -s --format=%cd --date=iso-strict-local HEAD)" \
+    		./userclouds/cmd
+
 $(SERVICE_BINARIES): $(_GO_SRCS)
 	go build --trimpath -o $@ \
 		-ldflags \
@@ -408,28 +415,6 @@ bin/auditlogview: $(_GO_SRCS)
 
 bin/remoteuserregionconfig: $(_GO_SRCS)
 	go build -o bin/remoteuserregionconfig ./cmd/remoteuserregionconfig
-
-#.PHONY: devsetup
-#devsetup: bin/testdevcert check_venv install-tools
-#devsetup: ## Initial setup when you clone the repo
-#	brew services restart redis || (docker run -dp 6379:6379 redis && echo "Using dockerized redis")
-#	mkdir -p ~/.n
-#	n $(shell cat .node-version | cut -c2-)
-#	tools/git/install.sh
-#	echo "CREATE USER userclouds_dev_root WITH CREATEDB CREATEROLE;" | psql postgres
-#	echo "CREATE DATABASE defaultdb;" | psql postgres
-#	echo "GRANT ALL PRIVILEGES ON DATABASE defaultdb TO userclouds_dev_root;" | psql postgres
-#	echo "CREATE TABLE tmp (id UUID);" | psql postgres
-#	echo "DROP TABLE tmp;" | psql postgres
-#	make provision-dev
-#	make ui-yarn-install ensure-secrets-dev
-#	python3 -mpip install --prefix $(VENV_PATH) -r requirements.txt
-#	cd terraform; tflint --init
-#	bin/testdevcert || (echo "ERROR: please see README for instructions on installing the dev HTTPS certificate"; exit 1)
-#	@echo "!!!!!!!!!!"
-#	@echo "IMPORTANT: to make yourself a UserClouds company admin, run \`tools/make-company-admin.sh dev '<youruserid>'\`"
-#	@echo "after creating an account on console (your user ID can be found in the upper right profile menu)"
-#	@echo "!!!!!!!!!!"
 
 .PHONY:
 build-deploy-binaries: $(SERVICE_BINARIES) bin/consoleuiinitdata

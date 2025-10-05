@@ -8,7 +8,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN make bin/userclouds
+RUN make image-binaries
 
 ###
 ### UI Builder

@@ -214,6 +214,10 @@ log-debug: bin/uclog
 	UC_UNIVERSE=debug tools/ensure-aws-auth.sh
 	bin/uclog --time 5 --streamname debug --live --verbose --outputpref sh --interactive --summary listlog
 
+######################### image binaries ##########################
+.PHONY: image-binaries
+image-binaries: bin/userclouds bin/consoleuiinitdata $(TOOL_BINARIES)
+
 ######################### service binaries ##########################
 bin/userclouds: $(_GO_SRCS)
 	go build --trimpath -o $@ \
@@ -231,7 +235,7 @@ $(SERVICE_BINARIES): $(_GO_SRCS)
 
 ######################### tool binaries ##########################
 $(TOOL_BINARIES): $(_GO_SRCS)
-	go build --trimpath -o $@ -ldflags "-s -w" ./$(notdir $@)/cmd
+	go build --trimpath -o $@ -ldflags "-s -w" ./cmd/$(notdir $@)
 
 ######################### code gen binaries #########################
 $(CODEGEN_BINARIES): $(_GO_SRCS)
@@ -369,10 +373,6 @@ bin/uclint: $(_GO_SRCS)
 tools:bin/migrate
 bin/migrate: $(_GO_SRCS)
 	go build -o bin/migrate ./cmd/migrate
-
-tools: bin/provision
-bin/provision: $(_GO_SRCS)
-	go build -o bin/provision ./cmd/provision
 
 tools: bin/tenantdbshell
 bin/tenantdbshell: $(_GO_SRCS)

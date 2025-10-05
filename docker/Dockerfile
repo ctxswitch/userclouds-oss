@@ -53,7 +53,7 @@ FROM debian:bookworm-slim@sha256:df52e55e3361a81ac1bead266f3373ee55d29aa50cf0975
 
 ENV PATH=/userclouds/bin:$PATH
 ENV UC_CONFIG_DIR=/userclouds/config/
-ENV UC_UNIVERSE=container
+ENV UC_UNIVERSE=onprem
 ENV UC_REGION=customerlocal
 ENV UC_CONFIG_MANIFEST_FILE=""
 
@@ -69,10 +69,10 @@ COPY --from=service-builder /usr/src/app/bin/. /userclouds/bin/
 COPY --from=console-builder /userclouds/console/consoleui/build/* /userclouds/uiassets/console/
 COPY --from=console-builder /userclouds/plex/plexui/build/* /userclouds/uiassets/plex/
 
-COPY docker/userclouds-full/config/provisioning/company.json /userclouds/provisioning/company.json
-COPY docker/userclouds-full/config/provisioning/tenant_console.json /userclouds/provisioning/tenant_console.json
+COPY docker/config/provisioning/company.json /userclouds/provisioning/company.json
+COPY docker/config/provisioning/tenant_console.json /userclouds/provisioning/tenant_console.json
 
-COPY docker/userclouds-full/run-uc.sh /userclouds/bin/
+COPY docker/run-uc.sh /userclouds/bin/
 RUN chmod +x /userclouds/bin/run-uc.sh
 
 RUN : \

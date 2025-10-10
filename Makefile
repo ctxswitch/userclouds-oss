@@ -445,9 +445,11 @@ localdev-cluster:
 
 .PHONY: localdev-shared
 localdev-shared:
-	@$(KUSTOMIZE) build config/localdev/userclouds/cert-manager | envsubst | $(KUBECTL) apply -f -
+	@$(KUSTOMIZE) build config/localdev/userclouds/kubegres | envsubst | $(KUBECTL) apply --server-side -f -
+	@$(KUSTOMIZE) build config/localdev/userclouds/cert-manager | envsubst | $(KUBECTL) apply --server-side -f -
 	@$(KUBECTL) wait --for=condition=available --timeout=120s deploy -l app.kubernetes.io/group=cert-manager -n cert-manager
-	@$(KUSTOMIZE) build config/localdev/userclouds/localstack | envsubst | $(KUBECTL) apply -f -
+	@$(KUSTOMIZE) build config/localdev/userclouds/localstack | envsubst | $(KUBECTL) apply --server-side -f -
+	@$(KUSTOMIZE) build config/localdev/userclouds/postgres | envsubst | $(KUBECTL) apply --server-side -f -
 	@$(KUBECTL) wait --for=condition=available --timeout=120s deploy/localstack -n userclouds
 
 .PHONY: localdev-clean

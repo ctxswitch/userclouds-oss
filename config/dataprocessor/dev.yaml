@@ -1,7 +1,0 @@
-db:
-  user: userclouds
-  dbname: companyconfig
-  host: localhost
-  dbdriver: postgres
-  dbproduct: postgres
-  port: 5432

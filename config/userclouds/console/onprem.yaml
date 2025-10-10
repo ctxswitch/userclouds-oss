@@ -1,0 +1,29 @@
+static_assets_path: userclouds/uiassets/console
+tenant_sub_domain: tenant.userclouds.svc.cluster.local
+tenant_protocol: https
+
+console_url: https://console.userclouds.svc.cluster.local
+
+log_db:
+  user: postgres
+  dbname: status_00000000000000000000000000000000
+  host: localhost
+  dbdriver: postgres
+  dbproduct: postgres
+  port: 5432
+
+internal_server:
+  protocol: http
+  host: 127.0.0.1
+  port: 5301
+
+svc_listener:
+  protocol: http
+  host: localhost
+  port: 5300
+
+console_tenant_id: 41ab79a8-0dff-418e-9d42-e1694469120a
+
+worker_client:
+  type: http
+  url: http://userclouds-worker:3012

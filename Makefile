@@ -1,11 +1,11 @@
 .DEFAULT_GOAL := help
 
-SHELL := /usr/bin/env bash
+# SHELL := /usr/bin/env bash
 
 # NB: many of these up-front vars need to use := to ensure that we expand them once (immediately)
 # rather than re-running these (marginally expensive) commands each time the var is referenced
 
-_GO_META = .go-version go.mod go.sum
+_GO_META = go.mod go.sum
 _GO_SRCS := $(shell find . -type f -name "*.go" ) $(_GO_META)
 # ignore 3rd party files (CocoaPods, Node modules, etc) and vendoreds (such as: tools/vendored-homebrew-install.sh)
 _SH_SRCS := $(shell find . -type f -name "*.sh" ! -iname "vendored-*.sh" | grep -v Pods | grep -v node_modules | grep -v \.venv | grep -v .terraform/modules)
@@ -19,20 +19,23 @@ _PLEXUI_REACT_SRCS := $(shell find plex/plexui/src) $(shell find plex/plexui/pub
 
 SERVICE_BINARIES = bin/console bin/plex bin/idp bin/authz bin/checkattribute bin/logserver bin/dataprocessor bin/worker
 CODEGEN_BINARIES = bin/parallelgen bin/genconstant bin/gendbjson bin/genvalidate bin/genstringconstenum bin/genorm bin/genschemas bin/genevents bin/genrouting bin/genhandler bin/genopenapi bin/genpageable
+TOOL_BINARIES = bin/automatedprovisioner bin/azcli bin/cachelookup bin/cachetool bin/cleanplextokens bin/provision bin/setcompanytype bin/tenantcopy
 
 TF_PATH = $(if $(TG_TF_PATH),$(TG_TF_PATH),"terraform")
+
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	@mkdir -p $(LOCALBIN)
+
+KUBECTL ?= kubectl
+KUSTOMIZE_VERSION ?= v5.4.2
+KUSTOMIZE = $(LOCALBIN)/kustomize
+
+LOCALDEV_CLUSTER ?= userclouds
 
 .PHONY: help
 help: ## List user-facing Make targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-
-.PHONY: grafana-start
-grafana-start: ## Start running Prometheus and Grafana locally
-	docker compose -f docker/grafana-dev/docker-compose.yaml up --detach
-
-.PHONY: grafana-stop
-grafana-stop: ## Stop running Prometheus and Grafana
-	docker compose -f docker/grafana-dev/docker-compose.yaml down
 
 # This is the main target for developers. It starts all the services and the UIs.
 # services-dev exists so that we don't rebuild all the react stuff in a ui-dev invocation
@@ -58,53 +61,6 @@ dbshell-staging: check-deps bin/tenantdbshell ## Connect to the staging database
 dbshell-debug: check-deps bin/tenantdbshell
 	@UC_UNIVERSE=debug tools/db-shell.sh debug
 
-# NOTE: call `make migrate-dev` explicitly inside single DEVDB START/STOP scope because there is a race
-# condition shutting down & restarting CDB if we invoke migrate-dev and provision-dev serially via
-# make target dependencies.
-.PHONY: provision-dev
-provision-dev: bin/migrate bin/provision ## Provision dev to latest
-	make migrate-dev
-	@tools/provision.sh dev
-
-.PHONY: provision-prod
-provision-prod: bin/provision check-deps ## Provision prod env to latest
-	@tools/provision-events.sh prod
-
-.PHONY: provision-staging
-provision-staging: bin/provision check-deps ## Provision staging env to latest
-	@tools/provision-events.sh staging
-
-provision-debug: bin/provision check-deps
-	@tools/provision.sh debug
-
-.PHONY: migrate-dev
-migrate-dev: FLAGS ?=--noPrompt
-migrate-dev: bin/migrate ## Migrate your dev databases up to latest
-	@tools/db-migrate.sh dev $(FLAGS)
-
-.PHONY: migrate-prod
-migrate-prod: bin/migrate check-deps ## Migrate production databases up to latest
-	@tools/db-migrate.sh prod
-
-.PHONY: migrate-staging
-migrate-staging: bin/migrate check-deps ## Migrate staging databases up to latest
-	@tools/db-migrate.sh staging
-
-migrate-debug: bin/migrate check-deps
-	@tools/db-migrate.sh debug
-
-.PHONY: deploy-prod
-deploy-prod: bin/migrate check-deps ## Deploy your current HEAD to production
-	@tools/deploy.sh prod
-
-.PHONY: deploy-staging
-deploy-staging: bin/migrate check-deps ## Deploy your current HEAD to staging
-	@tools/deploy.sh staging
-
-deploy-debug: bin/migrate check-deps
-	@tools/deploy.sh debug
-
-
 # NB: we no longer build all the codegen binaries themselves here because they are
 # now run in go routines in parallelgen to speed up package loading
 .PHONY: codegen
@@ -122,6 +78,7 @@ codegen-serial: $(CODEGEN_BINARIES) ## Run codegen to update generated files
 	go generate ./...
 	make gen-openapi-spec
 
+# TODO: move away from local tooling as a supported option
 TOOL_DEPS=jq yq direnv bash curl git-lfs hub awscli n yarn postgresql@14 tmux \
 	restack python3 terraform tflint terragrunt redis gh \
 	helm kubernetes-cli kubeconform argocd docker \
@@ -148,7 +105,6 @@ clean:
 	-rm -f $(CODEGEN_BINARIES)
 
 ######################## test runner ######################
-
 # Test DB should create a new DB / store per test run, so we can parallelize
 #   The store itself is in memory for perf, but the dir is still useful for interacting with it
 # Store the connection URL in a file so we can link it in
@@ -242,35 +198,6 @@ lintfix: bin/goimports bin/shfmt ## Automatically fix some lint problems
 lintfix: sharedui/build ui-lib/build # TODO: this is a required dep because the build generates *.d.ts files needed to lint downstream modules. We may want to check these in to git in the future?
 	@tools/lintfix.sh "$(_SH_SRCS)"
 
-.PHONY: lint-terraform
-lint-terraform: ## Run terraform linters
-	@make tgfmt
-	@make tffmt
-	@make tflint
-
-tgfmt:
-	@echo "Checking terragrunt HCL formatting..."
-	@terragrunt hcl fmt --check --exclude-dir .terraform && echo "Formatting okay" \
-		|| (echo "Run \"terragrunt hcl fmt --exclude-dir .terraform\" to fix the above files" >&2; exit 1)
-
-tg-generate:
-	@echo "Running terragrunt to generate terraform files"
-# Terragrunt's "get" command is used here as a reliable method to trigger file generation.
-# While "version" command was previously used, "get" is now preferred as it consistently
-# generates files across all Terragrunt versions.
-# Note: The command may fail in CI or local dev due to AWS credentials, but this is
-# acceptable since file generation occurs before the command fails.
-	@find terraform/configurations -name .terraform.lock.hcl -execdir terragrunt run -- get > /dev/null \;
-
-tffmt: tg-generate
-	@echo "Checking terraform formatting..."
-	@$(TF_PATH) fmt -recursive -check && echo "Formatting okay" \
-		|| (echo "Run \"terragrunt fmt -recursive\" to fix the above files" >&2; exit 1)
-
-tflint:
-	@echo Running tflint...
-	@cd terraform; tflint --recursive
-
 ######################### logging ##########################
 .PHONY: log-prod
 log-prod: bin/uclog
@@ -287,50 +214,30 @@ log-debug: bin/uclog
 	UC_UNIVERSE=debug tools/ensure-aws-auth.sh
 	bin/uclog --time 5 --streamname debug --live --verbose --outputpref sh --interactive --summary listlog
 
+######################### image binaries ##########################
+.PHONY: image-binaries
+image-binaries: bin/userclouds bin/consoleuiinitdata $(TOOL_BINARIES)
+
 ######################### service binaries ##########################
+bin/userclouds: $(_GO_SRCS)
+	go build --trimpath -o $@ \
+    		-ldflags \
+    			"-s -w -X userclouds.com/infra/service.buildHash=$(shell git rev-parse HEAD) \
+    			 -X userclouds.com/infra/service.buildTime=$(shell TZ=UTC git show -s --format=%cd --date=iso-strict-local HEAD)" \
+    		./userclouds/cmd
+
 $(SERVICE_BINARIES): $(_GO_SRCS)
-	go build -o $@ \
+	go build --trimpath -o $@ \
 		-ldflags \
-			"-X userclouds.com/infra/service.buildHash=$(shell git rev-parse HEAD) \
+			"-s -w -X userclouds.com/infra/service.buildHash=$(shell git rev-parse HEAD) \
 			 -X userclouds.com/infra/service.buildTime=$(shell TZ=UTC git show -s --format=%cd --date=iso-strict-local HEAD)" \
 		./$(notdir $@)/cmd
 
-bin/ucconfig: $(_GO_SRCS)
-	go build -o bin/ucconfig ./cmd/ucconfig
-
-bin/opensearch: $(_GO_SRCS)
-	go build -o bin/opensearch ./cmd/opensearch
-
-bin/devbox: $(_GO_SRCS)
-	go build -o bin/devbox ./cmd/devbox
-
-bin/devlb: $(_GO_SRCS)
-	go build -o bin/devlb ./cmd/devlb
-
-bin/azcli: $(_GO_SRCS)
-	go build -o bin/azcli ./cmd/azcli
-
-bin/cachelookup: $(_GO_SRCS)
-	go build -o bin/cachelookup ./cmd/cachelookup
-
-bin/cachetool: $(_GO_SRCS)
-	go build -o bin/cachetool ./cmd/cachetool
-
-bin/provisiontenanturls: $(_GO_SRCS)
-	go build -o bin/provisiontenanturls ./cmd/provisiontenanturls
-
-bin/cleanplextokens: $(_GO_SRCS)
-	go build -o bin/cleanplextokens ./cmd/cleanplextokens
-
-bin/cleanuserstoredata: $(_GO_SRCS)
-	go build -o bin/cleanuserstoredata ./cmd/cleanuserstoredata
-
-bin/setcompanytype: $(_GO_SRCS)
-	go build -o bin/setcompanytype ./cmd/setcompanytype
-
+######################### tool binaries ##########################
+$(TOOL_BINARIES): $(_GO_SRCS)
+	go build --trimpath -o $@ -ldflags "-s -w" ./cmd/$(notdir $@)
 
 ######################### code gen binaries #########################
-
 $(CODEGEN_BINARIES): $(_GO_SRCS)
 	@echo "building $@"
 	go build -o $@ ./cmd/$(notdir $@)
@@ -343,10 +250,8 @@ $(CODEGEN_BINARIES): $(_GO_SRCS)
 # to fetch and what versions to use, but re-running this may alter the `yarn.lock` file as dependencies change as
 # we don't always pin specific versions.
 .PHONY: ui-yarn-install
-ui-yarn-install: check_venv
 ui-yarn-install: ## Install/update dependencies for our React UI projects (needed if adding new deps)
-	python3 -mpip install --prefix $(VENV_PATH) setuptools # needed for gyp
-	yarn install
+	uv run yarn install
 	@tools/install-playwright.sh
 
 # Install dependencies and reqs needed to build UI bundles and run UI tests (playwright) in CI.
@@ -421,11 +326,6 @@ consoleui-test: ## Run the tests for 'consoleui'
 ui-dev: ## Run the dev backend + react dev server for plex & console
 	tmux new-session "tmux source-file tools/tmux-uidev.cmd"
 
-######################### tool build rules ##########################
-
-bin/envtest: $(_GO_SRCS)
-	go build -o $@ ./cmd/envtest
-
 bin/containerrunner: $(_GO_SRCS)
 	go build -o $@ ./cmd/containerrunner
 
@@ -474,10 +374,6 @@ tools:bin/migrate
 bin/migrate: $(_GO_SRCS)
 	go build -o bin/migrate ./cmd/migrate
 
-tools: bin/provision
-bin/provision: $(_GO_SRCS)
-	go build -o bin/provision ./cmd/provision
-
 tools: bin/tenantdbshell
 bin/tenantdbshell: $(_GO_SRCS)
 	go build -o bin/tenantdbshell ./cmd/tenantdbshell
@@ -520,88 +416,55 @@ bin/auditlogview: $(_GO_SRCS)
 bin/remoteuserregionconfig: $(_GO_SRCS)
 	go build -o bin/remoteuserregionconfig ./cmd/remoteuserregionconfig
 
-install-tools:
-	brew install $(TOOL_DEPS)
-############################ initial dev setup ###########################
-# this stuff should be idempotent...in theory
-
-# NB: we actually run brew install here (rather than just a check-deps dependency) so that
-# we're keeping our dev environments up to date-ish :)
-# We also set up userclouds_dev_root to keep dev closer to matching our config in AWS,
-# rather than relying on the local root account to have all permissions
-# NBB: we create and then drop a "fake" table in defaultdb to ensure GRANT ... on defaultdb.*
-# works even if you don't have any tables there (new install). We keep this GRANT around
-# in case you have existing tables (specifically migrations) that our userclouds subaccount
-# needs access to (this shouldn't happen after we transitioned to rootdb but maybe?)
-# We use dockerized redis here for Devin since for some reason local redis doesn't work there
-.PHONY: devsetup
-devsetup: bin/testdevcert check_venv install-tools
-devsetup: ## Initial setup when you clone the repo
-	brew services restart redis || (docker run -dp 6379:6379 redis && echo "Using dockerized redis")
-	mkdir -p ~/.n
-	n $(shell cat .node-version | cut -c2-)
-	tools/git/install.sh
-	echo "CREATE USER userclouds_dev_root WITH CREATEDB CREATEROLE;" | psql postgres
-	echo "CREATE DATABASE defaultdb;" | psql postgres
-	echo "GRANT ALL PRIVILEGES ON DATABASE defaultdb TO userclouds_dev_root;" | psql postgres
-	echo "CREATE TABLE tmp (id UUID);" | psql postgres
-	echo "DROP TABLE tmp;" | psql postgres
-	make provision-dev
-	make ui-yarn-install ensure-secrets-dev
-	python3 -mpip install --prefix $(VENV_PATH) -r requirements.txt
-	cd terraform; tflint --init
-	bin/testdevcert || (echo "ERROR: please see README for instructions on installing the dev HTTPS certificate"; exit 1)
-	@echo "!!!!!!!!!!"
-	@echo "IMPORTANT: to make yourself a UserClouds company admin, run \`tools/make-company-admin.sh dev '<youruserid>'\`"
-	@echo "after creating an account on console (your user ID can be found in the upper right profile menu)"
-	@echo "!!!!!!!!!!"
-
-VENV_BASE_DIR ?=
-VENV_PATH = $(VENV_BASE_DIR).venv
-check_venv:
-	@tools/ensure-python-venv.sh
-
-.PHONY: devsetup-samples
-devsetup-samples: bin/provision ## Setup your environment to run our sample projects
-	brew services start postgresql@14 || true # ignore error if postgres is already running
-	echo "create database sample_events; create user userclouds_events with password 'samples'; GRANT ALL PRIVILEGES ON DATABASE sample_events TO userclouds_events;" | psql postgres
-	bin/provision provision company config/provisioning/samples/company_contoso.json
-	bin/provision provision tenant config/provisioning/samples/tenant_contoso_dev.json
-	bin/provision provision tenant config/provisioning/samples/tenant_contoso_prod.json
-	bin/provision provision company config/provisioning/samples/company_allbirds.json
-	bin/provision provision tenant config/provisioning/samples/tenant_allbirds_dev.json
-	bin/provision provision tenant config/provisioning/samples/tenant_allbirds_prod.json
-
-############################ samples ###########################
-
-# run devsetup-samples first; we don't depend on it explicitly because it's sloooow
 .PHONY:
-run-events: ## Run the events sample app
-	@cd samples/events; go run main.go
-
-.PHONY:
-build-deploy-binaries: $(SERVICE_BINARIES) ui-build bin/consoleuiinitdata bin/optionsfilegenerator
+build-deploy-binaries: $(SERVICE_BINARIES) bin/consoleuiinitdata
 	echo "Built binaries for deployment"
 
 .PHONY:
 gen-openapi-spec: ## Generate the consolidated OpenAPI spec for our APIs
 	go run cmd/genopenapi/main.go
 
-configure-aws-cli:  ## configures AWS CLI for use w/ SSO
-	./tools/configure-aws-cli.sh
-
-.PHONY:
-ensure-secrets-dev: ## Make sure the secrets needed to run local dev environment are present
-	UC_UNIVERSE=debug tools/ensure-aws-auth.sh
-	go run cmd/ensuresecrets/main.go
-	direnv reload # need to reload direnv to pick up new secrets
-	aws sso logout # Don't stay logged into AWS SSO
-
-
 .PHONY: tf-provider-build
 tf-provider-build: ## Build the Terraform provider
 	$(MAKE) -C ./public-repos/terraform-provider-userclouds build
 
+######################### helm ##########################
+helm-dep-update:
+	helm dep update helm/charts/userclouds
 
-upgrade-terraform-providers:
-	find terraform -type f -name .terraform.lock.hcl -exec ./terraform/upgrade-terraform-providers.sh {} \;
+######################### local development ##########################
+.PHONY: localdev
+localdev: deps localdev-cluster localdev-shared
+
+.PHONY: localdev-cluster
+localdev-cluster:
+	@if k3d cluster get $(LOCALDEV_CLUSTER) --no-headers >/dev/null 2>&1;  \
+		then echo "Cluster exists, skipping creation"; \
+		else k3d cluster create --config config/localdev/k3d/config.yaml --volume $(PWD):/app; \
+		fi
+
+.PHONY: localdev-shared
+localdev-shared:
+	@$(KUSTOMIZE) build config/localdev/userclouds/cert-manager | envsubst | $(KUBECTL) apply -f -
+	@$(KUBECTL) wait --for=condition=available --timeout=120s deploy -l app.kubernetes.io/group=cert-manager -n cert-manager
+	@$(KUSTOMIZE) build config/localdev/userclouds/localstack | envsubst | $(KUBECTL) apply -f -
+	@$(KUBECTL) wait --for=condition=available --timeout=120s deploy/localstack -n userclouds
+
+.PHONY: localdev-clean
+localdev-clean:
+	@k3d cluster delete userclouds
+
+.PHONY: localdev-helm
+localdev-helm: helm-dep-update
+	helm upgrade --install userclouds helm/charts/userclouds \
+		--kube-context k3d-$(LOCALDEV_CLUSTER) \
+		--namespace userclouds \
+		--create-namespace \
+		--values helm/charts/values-localdev.yaml
+
+######################### deps ##########################
+deps: $(LOCALBIN) $(KUSTOMIZE)
+
+$(KUSTOMIZE):
+	@test -s $(KUSTOMIZE) || \
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)

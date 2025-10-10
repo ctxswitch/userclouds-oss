@@ -136,7 +136,6 @@ func (r *Resources) Delete(ctx context.Context, azc *authz.Client) error {
 }
 
 func (r *Resources) Diff(ctx context.Context, src *Resources, dst *Resources) {
-	// Build maps of dst resources for efficient lookup using ID
 	dstEdgeTypeMap := make(map[uuid.UUID]*authz.EdgeType)
 	for i := range dst.edgeTypes {
 		dstEdgeTypeMap[dst.edgeTypes[i].ID] = &dst.edgeTypes[i]
@@ -157,7 +156,6 @@ func (r *Resources) Diff(ctx context.Context, src *Resources, dst *Resources) {
 		dstObjectMap[dst.objects[i].ID] = &dst.objects[i]
 	}
 
-	// Find edgeTypes in src that don't exist in dst
 	for _, srcEdgeType := range src.edgeTypes {
 		if dstEdgeType, exists := dstEdgeTypeMap[srcEdgeType.ID]; !exists || !srcEdgeType.EqualsIgnoringID(dstEdgeType) {
 			r.edgeTypes = append(r.edgeTypes, srcEdgeType)
@@ -165,7 +163,6 @@ func (r *Resources) Diff(ctx context.Context, src *Resources, dst *Resources) {
 	}
 	uclog.Infof(ctx, "Diff: %d EdgeTypes", len(r.edgeTypes))
 
-	// Find edges in src that don't exist in dst
 	for _, srcEdge := range src.edges {
 		if dstEdge, exists := dstEdgeMap[srcEdge.ID]; !exists || !srcEdge.EqualsIgnoringID(dstEdge) {
 			r.edges = append(r.edges, srcEdge)
@@ -173,7 +170,6 @@ func (r *Resources) Diff(ctx context.Context, src *Resources, dst *Resources) {
 	}
 	uclog.Infof(ctx, "Diff: %d Edges", len(r.edges))
 
-	// Find objectTypes in src that don't exist in dst
 	for _, srcObjectType := range src.objectTypes {
 		if dstObjectType, exists := dstObjectTypeMap[srcObjectType.ID]; !exists || !srcObjectType.EqualsIgnoringID(dstObjectType) {
 			r.objectTypes = append(r.objectTypes, srcObjectType)
@@ -181,7 +177,6 @@ func (r *Resources) Diff(ctx context.Context, src *Resources, dst *Resources) {
 	}
 	uclog.Infof(ctx, "Diff: %d ObjectTypes", len(r.objectTypes))
 
-	// Find objects in src that don't exist in dst
 	for _, srcObject := range src.objects {
 		if dstObject, exists := dstObjectMap[srcObject.ID]; !exists || !srcObject.EqualsIgnoringID(dstObject) {
 			r.objects = append(r.objects, srcObject)

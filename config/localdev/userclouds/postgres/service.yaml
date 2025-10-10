@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: cloud
+    replicationRole: primary
+  name: cloud
+  namespace: db
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  sessionAffinity: None
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: cloud
+    replicationRole: primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: cloud
+    replicationRole: primary
+  name: cloud-np
+  namespace: db
+spec:
+  type: NodePort
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  sessionAffinity: None
+  ports:
+    - port: 5433
+      targetPort: 5432
+      nodePort: 30100
+  selector:
+    app: cloud
+    replicationRole: primary

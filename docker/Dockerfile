@@ -68,8 +68,8 @@ COPY config/userclouds /userclouds/config
 COPY --from=service-builder /usr/src/app/bin/. /userclouds/bin/
 
 # Copy UI components
-COPY --from=console-builder /userclouds/console/consoleui/build/* /userclouds/uiassets/console/
-COPY --from=console-builder /userclouds/plex/plexui/build/* /userclouds/uiassets/plex/
+COPY --from=console-builder /userclouds/console/consoleui/build /userclouds/uiassets/console
+COPY --from=console-builder /userclouds/plex/plexui/build /userclouds/uiassets/plex
 
 RUN : \
     && groupadd --gid 99 userclouds \
@@ -87,5 +87,4 @@ RUN : \
     && :
 
 USER userclouds:userclouds
-EXPOSE 3040
-CMD ["/userclouds/bin/userclouds"]
+ENTRYPOINT ["/userclouds/bin/userclouds"]

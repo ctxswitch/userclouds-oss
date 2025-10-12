@@ -31,30 +31,27 @@ type Provider struct{}
 // I'd like to merge into the config at a later time, but this is the most straight
 // forward approach given how it is handled right now (based on universe env vars)
 // since there would need to be other changes to the callers.
-func FromEnv() Interface {
+func FromEnv() (Interface, error) {
 	// Supporting three stores at the moment.  If the store isn't defined we choose the
 	// expected AWS for cloud and on-prem universes.  I may get rid of `dev` later on since
 	// the local development environment is also changing.
 	value, isDefined := os.LookupEnv(SecretManagerEnvKey)
 	if !isDefined {
-		return aws.New()
+		return aws.New(), nil
 	}
 
 	storeMap := map[string]Interface{
 		"aws":        aws.New(),
 		"kubernetes": kubernetes.New(),
 		"dev":        dev.New(),
-		"env":        env.New(),
 	}
 
-	if provider, found := storeMap[value]; found {
-		return provider
+	provider, found := storeMap[value]
+	if !found {
+		return nil, fmt.Errorf("secret provider not found in environment variable %s", SecretManagerEnvKey)
 	}
 
-	// Assume AWS provider for all unknown.  I don't particularly like this, but there are some
-	// the overall behavior previously was to prefer AWS, so keep this.  This is a blind error
-	// though so might want to at least log here, but didn't want to pass in the context.
-	return aws.New()
+	return provider, nil
 }
 
 func FromLocation(loc string) (Interface, error) {

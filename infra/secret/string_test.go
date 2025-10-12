@@ -14,8 +14,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
-	"userclouds.com/infra/secret/provider"
 	"userclouds.com/infra/secret/provider/aws"
+	"userclouds.com/infra/secret/provider/dev"
 	"userclouds.com/infra/secret/provider/kubernetes"
 )
 
@@ -23,7 +23,7 @@ type testStruct struct {
 	Secret *String `yaml:"secret" json:"secret" db:"secret"`
 }
 
-func TestFieldYAML(t *testing.T) {
+func TestStringYAML(t *testing.T) {
 	ctx := context.Background()
 	y := "secret: dev-literal://not-actually-secret"
 	var got testStruct
@@ -41,7 +41,7 @@ func TestFieldYAML(t *testing.T) {
 	assert.Equal(t, s, "foo")
 }
 
-func TestFieldJSON(t *testing.T) {
+func TestStringJSON(t *testing.T) {
 	ctx := context.Background()
 	j := `{"secret":"dev-literal://testme"}`
 	var got testStruct
@@ -74,7 +74,7 @@ func TestFromLocation(t *testing.T) {
 	assert.Equal(t, devSecret.String(), "**********************") // NB: .String() is required for types to match in assert
 }
 
-func TestField_Value(t *testing.T) {
+func TestString_Value(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string
@@ -93,7 +93,7 @@ func TestField_Value(t *testing.T) {
 	}
 }
 
-func TestField_Scan(t *testing.T) {
+func TestString_Scan(t *testing.T) {
 	tests := []struct {
 		name  string
 		input any
@@ -118,7 +118,7 @@ func TestField_Scan(t *testing.T) {
 	}
 }
 
-func TestField_Validate(t *testing.T) {
+func TestString_Validate(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -145,7 +145,7 @@ func TestField_Validate(t *testing.T) {
 	}
 }
 
-func TestField_NewString_Dev(t *testing.T) {
+func TestString_NewString_Dev(t *testing.T) {
 	tests := []struct {
 		description string
 		service     string
@@ -156,21 +156,58 @@ func TestField_NewString_Dev(t *testing.T) {
 		{"simple", "service", "my-secret", "testsecret", "dev://dGVzdHNlY3JldA=="},
 	}
 
+	ctx := context.Background()
+	t.Setenv("UC_UNIVERSE", "test")
+
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			ctx := context.Background()
-
-			t.Setenv(provider.SecretManagerEnvKey, "dev")
-			t.Setenv("UC_UNIVERSE", "test")
-
-			s, err := NewString(ctx, tt.service, tt.name, tt.value)
+			s, err := NewStringWithProvider(ctx, tt.service, tt.name, tt.value, dev.New())
 			assert.NoError(t, err)
 			assert.Equal(t, tt.location, s.location)
 		})
 	}
 }
 
-func TestField_Resolve(t *testing.T) {
+func TestString_NewString_Kubernetes(t *testing.T) {
+	tests := []struct {
+		description string
+		service     string
+		name        string
+		value       string
+		location    string
+		secret      string
+		fixture     *corev1.Secret
+	}{
+		{"simple creation", "service", "my-secret", "testsecret", "kube://secrets/userclouds/test/service/my-secret", "userclouds.test.service.my-secret", nil},
+		{"simple update", "service", "my-secret", "testsecret", "kube://secrets/userclouds/test/service/my-secret", "userclouds.test.service.my-secret", &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-secret",
+				Namespace: kubernetes.DefaultNamespace,
+			},
+			Data: map[string][]byte{
+				"value": []byte("secrettoupdate"),
+			},
+		}},
+	}
+
+	ctx := context.Background()
+	t.Setenv("UC_UNIVERSE", "test")
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			c := fake.NewSimpleClientset(tt.fixture)
+			s, err := NewStringWithProvider(ctx, tt.service, tt.name, tt.value, kubernetes.New().WithClient(c))
+			assert.NoError(t, err)
+			assert.Equal(t, tt.location, s.location)
+
+			secret, err := c.CoreV1().Secrets(kubernetes.DefaultNamespace).Get(ctx, tt.secret, metav1.GetOptions{})
+			assert.NoError(t, err)
+			assert.Equal(t, tt.value, string(secret.Data["value"]))
+		})
+	}
+}
+
+func TestString_Resolve(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string

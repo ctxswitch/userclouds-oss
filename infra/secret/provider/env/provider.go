@@ -3,6 +3,7 @@ package env
 import (
 	"context"
 	"os"
+	"regexp"
 
 	"userclouds.com/infra/ucerr"
 )
@@ -10,6 +11,8 @@ import (
 const (
 	Prefix = "env://"
 )
+
+var specialCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
 type Provider struct{}
 

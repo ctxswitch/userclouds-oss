@@ -11,6 +11,7 @@ import (
 	"userclouds.com/infra/secret/prefix"
 	"userclouds.com/infra/secret/provider"
 	"userclouds.com/infra/ucerr"
+	"userclouds.com/infra/uclog"
 )
 
 var (
@@ -29,15 +30,24 @@ type String struct {
 // NewString returns a new secret.String that is stored "correctly" according to
 // the underlying provider.
 func NewString(ctx context.Context, serviceName, name, secret string) (*String, error) {
+	pv, err := provider.FromEnv()
+	if err != nil {
+		uclog.Errorf(ctx, "Failed to get provider from env: %v", err)
+		return &EmptyString, err
+	}
+
+	return NewStringWithProvider(ctx, serviceName, name, secret, pv)
+}
+
+// NewStringWithProvider allows the definition of a provider that the secret will
+// be associated with.
+func NewStringWithProvider(ctx context.Context, serviceName, name, secret string, pv provider.Interface) (*String, error) {
 	// Special case that existed prior to refactor where empty secrets could be added. It
 	// may makes sense to phase these out.
 	if secret == "" {
 		return &EmptyString, nil
 	}
-
 	uv := universe.Current()
-
-	pv := provider.FromEnv()
 	path := getSecretPath(uv, serviceName, name)
 
 	err := pv.Save(ctx, path, secret)
@@ -252,6 +262,14 @@ func (s *String) GetProvider() (provider.Interface, error) {
 
 	s.provider = pv
 	return s.provider, nil
+}
+
+func (s *String) GetDefaultProvider() (provider.Interface, error) {
+	if s.provider != nil {
+		return s.provider, nil
+	}
+
+	return provider.FromEnv()
 }
 
 // WithProvider sets the provider that will be used for storing the secret.  Currently

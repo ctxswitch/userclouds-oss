@@ -23,7 +23,8 @@ func LocationFromName(serviceName, name string) string {
 	// This may break some previous assumptions, but since on-prem and cloud universes are
 	// aws by default, this shouldn't break.  Local development work will need to define
 	// the specific manager instead of intuiting it from the universe.
-	pv := provider.FromEnv()
+	// TODO: Update auth/m2m to respect errors.
+	pv, _ := provider.FromEnv()
 	path := getSecretPath(universe.Current(), serviceName, name)
 	return fmt.Sprintf("%s%s", pv.Prefix(), path)
 }

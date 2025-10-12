@@ -6,16 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 
 	"userclouds.com/infra/namespace/universe"
-	"userclouds.com/infra/uclog"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-
 	"userclouds.com/infra/ucaws"
 	"userclouds.com/infra/ucerr"
+	"userclouds.com/infra/uclog"
 )
 
 const (

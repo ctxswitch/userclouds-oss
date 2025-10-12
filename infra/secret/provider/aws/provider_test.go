@@ -2,14 +2,12 @@ package aws
 
 import (
 	"context"
+	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/stretchr/testify/mock"
-
-	"testing"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestAWS_getAWSSecretWithClient(t *testing.T) {

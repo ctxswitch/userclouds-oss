@@ -2,6 +2,8 @@
 
 # SHELL := /usr/bin/env bash
 
+export PATH=./bin:$PATH
+
 # NB: many of these up-front vars need to use := to ensure that we expand them once (immediately)
 # rather than re-running these (marginally expensive) commands each time the var is referenced
 

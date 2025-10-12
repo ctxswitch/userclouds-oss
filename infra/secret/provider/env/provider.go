@@ -21,6 +21,10 @@ func (p *Provider) Prefix() string {
 	return Prefix
 }
 
+func (p *Provider) IsDev() bool {
+	return false
+}
+
 // Get returns a secret from an environment variable.
 func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	secret, defined := os.LookupEnv(path)

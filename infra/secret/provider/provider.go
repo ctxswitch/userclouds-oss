@@ -21,6 +21,7 @@ type Interface interface {
 	Delete(ctx context.Context, path string) error
 	Save(ctx context.Context, path, secret string) error
 	Prefix() string
+	IsDev() bool
 }
 
 type Provider struct{}
@@ -71,9 +72,9 @@ func FromLocation(loc string) (Interface, error) {
 	case prefix.PrefixKubernetes:
 		return kubernetes.New(), nil
 	case prefix.PrefixDev:
-		return dev.New().WithDecodeEnabled(), nil
-	case prefix.PrefixDevLiteral:
 		return dev.New(), nil
+	case prefix.PrefixDevLiteral:
+		return dev.New().WithLiterals(), nil
 	}
 
 	return nil, fmt.Errorf("unknown secret provider for %s", loc)

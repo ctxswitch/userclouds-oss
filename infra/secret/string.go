@@ -3,6 +3,7 @@ package secret
 import (
 	"context"
 	"database/sql/driver"
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -28,6 +29,12 @@ type String struct {
 // NewString returns a new secret.String that is stored "correctly" according to
 // the underlying provider.
 func NewString(ctx context.Context, serviceName, name, secret string) (*String, error) {
+	// Special case that existed prior to refactor where empty secrets could be added. It
+	// may makes sense to phase these out.
+	if secret == "" {
+		return &EmptyString, nil
+	}
+
 	uv := universe.Current()
 
 	pv := provider.FromEnv()
@@ -38,13 +45,28 @@ func NewString(ctx context.Context, serviceName, name, secret string) (*String, 
 		return nil, ucerr.Wrap(err)
 	}
 
-	loc := fmt.Sprintf("%s%s", pv.Prefix(), path)
+	// There's a special condition for dev-like providers that do not store the path.  I think
+	// that we may be able to get rid of the "dev" provider with the new local development
+	// patterns, but I'll keep this here to be compatible for now.  Dev literals are not supported
+	// for NewString, but this mirrors the capabilities of the original.
+	var loc string
+	if pv.IsDev() {
+		encSecret := base64.StdEncoding.EncodeToString([]byte(secret))
+		loc = fmt.Sprintf("%s%s", pv.Prefix(), encSecret)
+	} else {
+		loc = fmt.Sprintf("%s%s", pv.Prefix(), path)
+	}
+
 	return FromLocation(loc), nil
 }
 
 // Resolve decides if the string is a Secret Store path and resolves it, or returns
 // the string unchanged otherwise.
 func (s *String) Resolve(ctx context.Context) (string, error) {
+	if s.IsEmpty() {
+		return "", nil
+	}
+
 	secret, found := c.Get(s.location)
 	if found {
 		return secret, nil

@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
+	"userclouds.com/infra/secret/provider"
 	"userclouds.com/infra/secret/provider/aws"
 	"userclouds.com/infra/secret/provider/kubernetes"
 )
@@ -140,6 +141,31 @@ func TestField_Validate(t *testing.T) {
 			} else {
 				assert.Error(t, s.Validate())
 			}
+		})
+	}
+}
+
+func TestField_NewString_Dev(t *testing.T) {
+	tests := []struct {
+		description string
+		service     string
+		name        string
+		value       string
+		location    string
+	}{
+		{"simple", "service", "my-secret", "testsecret", "dev://dGVzdHNlY3JldA=="},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			ctx := context.Background()
+
+			t.Setenv(provider.SecretManagerEnvKey, "dev")
+			t.Setenv("UC_UNIVERSE", "test")
+
+			s, err := NewString(ctx, tt.service, tt.name, tt.value)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.location, s.location)
 		})
 	}
 }

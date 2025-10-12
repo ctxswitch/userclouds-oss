@@ -44,6 +44,10 @@ func (p *Provider) Prefix() string {
 	return Prefix
 }
 
+func (p *Provider) IsDev() bool {
+	return false
+}
+
 func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	if err := p.initClient(ctx); err != nil {
 		return "", ucerr.Wrap(err)

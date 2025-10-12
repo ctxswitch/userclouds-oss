@@ -18,23 +18,27 @@ type Provider struct {
 
 func New() *Provider {
 	return &Provider{
-		decode: false,
+		decode: true,
 	}
 }
 
-// WithDecodeEnabled enables base64 decoding of the secret.
-func (p *Provider) WithDecodeEnabled() *Provider {
-	p.decode = true
+// WithLiterals enables base64 decoding of the secret.
+func (p *Provider) WithLiterals() *Provider {
+	p.decode = false
 	return p
 }
 
 func (p *Provider) Prefix() string {
-	// This is a bit naive, but at the moment dev-literals only enable decode.
+	// This is a bit naive, but at the moment dev only enables decode.
 	if p.decode {
 		return PrefixDev
 	}
 
 	return PrefixDevLiteral
+}
+
+func (p *Provider) IsDev() bool {
+	return true
 }
 
 // Get is just a passthrough returning the 'path' which is the secret value
@@ -43,13 +47,14 @@ func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	secret := path
 
 	if p.decode {
-		bs, err := base64.StdEncoding.DecodeString(path)
+		bs, err := base64.StdEncoding.DecodeString(secret)
 		if err != nil {
 			return "", ucerr.Wrap(err)
 		}
 
 		secret = string(bs)
 	}
+
 	return secret, nil
 }
 

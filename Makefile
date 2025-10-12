@@ -180,7 +180,7 @@ check-go-modules:
 lint: ## Lint code and config
 	@tools/lint.sh
 
-lint-golang: .go-version bin/goimports bin/staticcheck bin/errcheck bin/revive bin/uclint bin/modernize
+lint-golang: bin/goimports bin/staticcheck bin/errcheck bin/revive bin/uclint bin/modernize
 	@tools/lint-golang.sh
 
 lint-frontend: sharedui/build ui-lib/build # TODO: this is a required dep because the build generates *.d.ts files needed to lint downstream modules. We may want to check these in to git in the future?
@@ -332,16 +332,16 @@ bin/containerrunner: $(_GO_SRCS)
 	go build -o $@ ./cmd/containerrunner
 
 tools: bin/goimports
-bin/goimports: .go-version go.mod
+bin/goimports: go.mod
 	go install -mod=readonly golang.org/x/tools/cmd/goimports
 
 tools: bin/modernize
-bin/modernize: .go-version go.mod
+bin/modernize: go.mod
 	go install -mod=readonly golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.18.0
 
 tools: bin/shfmt
 # When upgrading shfmt, make sure to update the version the cache key in .github/workflows/lint-shell.yml
-bin/shfmt: .go-version go.mod
+bin/shfmt: go.mod
 	go install -mod=readonly mvdan.cc/sh/v3/cmd/shfmt@v3.11.0
 
 # Note that in CI, we untar shellcheck directly into bin/ so we don't polute our git porcelain status :)
@@ -357,15 +357,15 @@ else
 endif
 
 tools: bin/staticcheck
-bin/staticcheck: .go-version go.mod
+bin/staticcheck: go.mod
 	go install -mod=readonly honnef.co/go/tools/cmd/staticcheck@2025.1.1
 
 tools: bin/revive
-bin/revive: .go-version go.mod
+bin/revive: go.mod
 	go install -mod=readonly github.com/mgechev/revive
 
 tools: bin/errcheck
-bin/errcheck: .go-version go.mod
+bin/errcheck: go.mod
 	go install -mod=readonly github.com/kisielk/errcheck
 
 tools: bin/uclint

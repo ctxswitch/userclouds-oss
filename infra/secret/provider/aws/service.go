@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/stretchr/testify/mock"
 )

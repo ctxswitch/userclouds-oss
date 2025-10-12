@@ -175,14 +175,17 @@ func TestField_Resolve(t *testing.T) {
 		name   string
 		input  string
 		output string
+		cached bool
 		setup  func(*String)
 	}{
-		{"dev", "dev://bXktc2VjcmV0", "my-secret", func(*String) {}},
-		{"dev-literal", "dev-literal://my-secret", "my-secret", func(*String) {}},
-		{"env", "env://MY_SECRET", "my-secret", func(*String) {
+		{"empty", "", "", false, func(*String) {}},
+		{"no prefix", "testsecret", "testsecret", false, func(*String) {}},
+		{"dev", "dev://bXktc2VjcmV0", "my-secret", true, func(*String) {}},
+		{"dev-literal", "dev-literal://my-secret", "my-secret", true, func(*String) {}},
+		{"env", "env://MY_SECRET", "my-secret", true, func(*String) {
 			t.Setenv("MY_SECRET", "my-secret")
 		}},
-		{"kubernetes", "kube://secrets/my-secret", "testsecret", func(s *String) {
+		{"kubernetes", "kube://secrets/my-secret", "testsecret", true, func(s *String) {
 			s.WithProvider(kubernetes.New().WithClient(fake.NewSimpleClientset(&corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-secret",
@@ -193,7 +196,7 @@ func TestField_Resolve(t *testing.T) {
 				},
 			})))
 		}},
-		{"aws", "aws://secrets/my-secret", "testsecret", func(s *String) {
+		{"aws", "aws://secrets/my-secret", "testsecret", true, func(s *String) {
 			sm := &aws.MockSecretsManagerClient{}
 			input := &secretsmanager.GetSecretValueInput{
 				SecretId:     ptr.To("my-secret"),
@@ -216,9 +219,11 @@ func TestField_Resolve(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, tt.output, secret)
 
-			cachedValue, found := c.Get(tt.input)
-			assert.True(t, found)
-			assert.Equal(t, tt.output, cachedValue)
+			if tt.cached {
+				cachedValue, found := c.Get(tt.input)
+				assert.True(t, found)
+				assert.Equal(t, tt.output, cachedValue)
+			}
 		})
 	}
 }

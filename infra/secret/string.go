@@ -63,8 +63,16 @@ func NewString(ctx context.Context, serviceName, name, secret string) (*String, 
 // Resolve decides if the string is a Secret Store path and resolves it, or returns
 // the string unchanged otherwise.
 func (s *String) Resolve(ctx context.Context) (string, error) {
+	// Handle the empty case
 	if s.IsEmpty() {
 		return "", nil
+	}
+
+	// If we don't have a prefix then just return the location.  I don't
+	// know if this is used, but the behavior was expected prior to the
+	// refactor.
+	if !s.HasPrefix() {
+		return s.location, nil
 	}
 
 	secret, found := c.Get(s.location)
@@ -87,11 +95,18 @@ func (s *String) Resolve(ctx context.Context) (string, error) {
 		return "", ucerr.Wrap(err)
 	}
 
-	// TODO: I've removed the handling of secrets that did not have a prefix.  Add them back later.
-	//   This will also handle empty secrets as well.
-
 	c.Store(s.location, value)
 	return value, nil
+}
+
+// HasPrefix returns true if there is a prefix specifying the secrets
+// provider in the form of <name>://<path>.
+func (s *String) HasPrefix() bool {
+	if strings.Contains(s.location, "://") {
+		return true
+	}
+
+	return false
 }
 
 // ResolveForUI simplifies the logic (slightly) for UIs to display secrets

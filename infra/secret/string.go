@@ -204,7 +204,7 @@ func (s *String) String() string {
 }
 
 // Validate implements Validateable
-func (s *String) Validate() error {
+func (s String) Validate() error {
 	// empty secrets are ok
 	if s.IsEmpty() {
 		return nil
@@ -224,7 +224,7 @@ func (s *String) Validate() error {
 }
 
 // IsEmpty checks if the secret.String location is empty
-func (s *String) IsEmpty() bool {
+func (s String) IsEmpty() bool {
 	return s.location == ""
 
 }
@@ -245,7 +245,7 @@ func (s *String) Scan(value any) error {
 }
 
 // Value implements sql.Valuer
-func (s *String) Value() (driver.Value, error) {
+func (s String) Value() (driver.Value, error) {
 	return s.location, nil
 }
 

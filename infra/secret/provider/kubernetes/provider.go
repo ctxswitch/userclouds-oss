@@ -84,5 +84,6 @@ func (p *Provider) initClient() error {
 // pathToSecretName turns a <service>/<name> userclouds secret path
 // to a k8s compatible name.
 func pathToSecretName(path string) string {
-	return strings.Replace(path, "/", ".", -1)
+	n := strings.Replace(path, "_", "-", -1)
+	return strings.Replace(n, "/", ".", -1)
 }

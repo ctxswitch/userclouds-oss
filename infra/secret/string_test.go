@@ -14,14 +14,18 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
-
 	"userclouds.com/infra/secret/provider/aws"
 	"userclouds.com/infra/secret/provider/dev"
 	"userclouds.com/infra/secret/provider/kubernetes"
 )
 
+// TODO: This represents Config which doesn't use a pointer to `String`.
+// Previously we were using a pointer in the test struct and it missed
+// an error that was introduced by adding pointer receivers to the
+// text Marshaler and sql functions. Should see if we can unpack this
+// and get everything to use the pointer receivers.
 type testStruct struct {
-	Secret *String `yaml:"secret" json:"secret" db:"secret"`
+	Secret String `yaml:"secret" json:"secret" db:"secret"`
 }
 
 func TestStringYAML(t *testing.T) {
@@ -64,6 +68,29 @@ func TestStringJSON(t *testing.T) {
 	bs, err := json.Marshal(got)
 	assert.NoError(t, err)
 	assert.Equal(t, string(bs), j)
+}
+
+func TestJsonMarshal(t *testing.T) {
+	s := testStruct{
+		Secret: String{
+			location: "dev-literal://supersecret",
+		},
+	}
+
+	expected := `{"secret":"dev-literal://supersecret"}`
+
+	bs, err := json.Marshal(s)
+	assert.NoError(t, err)
+	assert.Equal(t, expected, string(bs))
+}
+
+func TestJsonUnmarshal(t *testing.T) {
+	s := `{"secret":"dev-literal://supersecret"}`
+
+	got := testStruct{}
+	err := json.Unmarshal([]byte(s), &got)
+	assert.NoError(t, err)
+	assert.Equal(t, "dev-literal://supersecret", got.Secret.location)
 }
 
 func TestFromLocation(t *testing.T) {

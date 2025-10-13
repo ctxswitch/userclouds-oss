@@ -183,7 +183,7 @@ func (s *String) UnmarshalYAML(unmarshal func(any) error) error {
 // MarshalText implements encoding.TextMarshaler
 // NB: we don't implement MarshalJSON because we intentionally *don't* want
 // to emit a rich object here (for backcompat, and no need)
-func (s *String) MarshalText() ([]byte, error) {
+func (s String) MarshalText() ([]byte, error) {
 	// we always save location since it's either the pointer we
 	// want to save, or it's a copy of .value anyway
 	return []byte(s.location), nil

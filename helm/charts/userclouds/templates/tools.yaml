@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tools
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "userclouds.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tools.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        userclouds.sla: critical
+        {{- include "tools.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.tools.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tools.serviceAccountName }}
+      serviceAccountName: {{ toYaml . }}
+      {{- end }}
+      volumes:
+        - name: provisioning
+          configMap:
+            name: userclouds-provisioning
+        - name: configmap
+          configMap:
+            name: userclouds-configs
+            items:
+              - key: base
+                path: {{ printf "base_%s.yaml" .Values.universe }}
+              - key: authz
+                path: {{ printf "authz/%s.yaml" .Values.universe }}
+              - key: checkattribute
+                path: {{ printf "checkattribute/%s.yaml" .Values.universe }}
+              - key: logserver
+                path: {{ printf "logserver/%s.yaml" .Values.universe }}
+              - key: idp
+                path: {{ printf "idp/%s.yaml" .Values.universe }}
+              - key: worker
+                path: {{ printf "worker/%s.yaml" .Values.universe }}
+              - key: console
+                path: {{ printf "console/%s.yaml" .Values.universe }}
+              - key: plex
+                path: {{ printf "plex/%s.yaml" .Values.universe }}
+              - key: rootdb
+                path: {{ printf "rootdb/%s.yaml" .Values.universe }}
+              - key: rootdbstatus
+                path: {{ printf "rootdbstatus/%s.yaml" .Values.universe }}
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tools
+          image: "{{ include "userclouds.image" . }}"
+          imagePullPolicy: IfNotPresent
+          {{- with .Values.tools.workingDir }}
+          workingDir: {{ toYaml . }}
+          {{- end }}
+          command:
+            - sleep
+            - infinity
+          {{- include "userclouds.envConfigMap" . | nindent 10 }}
+          env:
+            - name: UC_BASE_PROVISION_FILES_PATH
+              value: /userclouds/provisioning
+            - name: COMPANY_NAME
+              value: {{ .Values.company_name }}
+            - name: ADMIN_USER_EMAIL
+              value: {{ .Values.admin_user_email }}
+            - name: CUSTOMER_DOMAIN
+              value: {{ tpl .Values.domain . }}
+            {{- if .Values.config.skipEnsureAWSSecretsAccess }}
+            - name: SKIP_ENSURE_AWS_SECRETS_ACCESS
+              value: "true"
+            {{- end }}
+            {{- include "userclouds.envVars" . | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{ toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.tools.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: configmap
+              mountPath: /userclouds/configmaps
+            - name: provisioning
+              mountPath: /userclouds/provisioning
+          {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

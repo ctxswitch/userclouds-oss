@@ -1,0 +1,31 @@
+image:
+  repository: golang
+  tag: 1.24-bookworm@sha256:3ce988c30fa67dc966ca716ee0ce7ad08d7330573e808cb68ada7e419bdf23de
+
+tools:
+  workingDir: /usr/src/app
+  resources:
+    limits:
+      cpu: 2
+      memory: 2048Mi
+    requests:
+      cpu: 2
+      memory: 2048Mi
+
+# Local directory that is mounted through k3d
+extraVolumes:
+  - name: app
+    hostPath:
+      path: /app
+
+extraVolumeMounts:
+  - name: app
+    mountPath: /usr/src/app
+    readOnly: true
+
+extraEnv:
+  - name: PG_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: postgres-secret
+        key: superUserPassword

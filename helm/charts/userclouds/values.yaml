@@ -1,15 +1,37 @@
 region: customerlocal
-universe: ""
-domain: {{ .Release.Namespace }}.svc.cluster.local
-company_id: "1ee4497e-c326-4068-94ed-3dcdaaaa53bc"
-#-- TODO: we can probably replace this with a generated url...
-console_tenant_id: "41ab79a8-0dff-418e-9d42-e1694469120a"
+universe: onprem
+domain: '{{ .Release.Namespace }}.svc.cluster.local'
+company_id: 1ee4497e-c326-4068-94ed-3dcdaaaa53bc
+console_tenant_id: 41ab79a8-0dff-418e-9d42-e1694469120a
+company_name: userclouds
+admin_user_email: "admin@example.org"
+google_client_id: "clientid"
+
+image:
+  repository: ctxsh/userclouds
+  tag: 2025-10-12.01
+
+protocol: http
+
+extraVolumeMounts: {}
+extraVolumes: {}
 
 #-- Only enabled in a single region.
 enableCronJobs: false
 
 # Change to termination grace seconds.
 preStopSleepSeconds: 15
+
+tools:
+  enabled: true
+  serviceAccountName: provisioner
+  resources:
+    limits:
+      cpu: 0.5
+      memory: 256Mi
+    requests:
+      cpu: 0.4
+      memory: 128Mi
 
 #-- Plex service
 plex:
@@ -100,13 +122,12 @@ config:
       protocol: http
       host: localhost
       port: 5100
-    console_tenant_id: {{ tpl (.Values.console_tenant_id) $ }}
-
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
   #-- Base
   base:
     company_db: # Using postgres in container env, user/pw must match docker/userclouds-headless/docker-compose.yaml
-      user: uc_root_user
-      password: dev-literal://uc87871fakepw
+      user: postgres
+      password: env://PG_PASSWORD
       dbname: companyconfig
       host: postgres
       dbdriver: postgres
@@ -131,15 +152,15 @@ config:
       protocol: http
       host: localhost
       port: 5210
-    console_tenant_id: {{ tpl (.Values.console_tenant_id) $ }}
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
 
   #-- Console service configuration
   console:
     static_assets_path: /userclouds/uiassets/console/
-    console_url: {{ include "userclouds.console.url" $ }}
+    console_url: '{{ include "userclouds.console.url" $ }}'
     log_db:
-      user: uc_root_user
-      password: dev-literal://uc87871fakepw
+      user: postgres
+      password: env://PG_PASSWORD
       dbname: status_fake
       host: postgres
       dbdriver: postgres
@@ -149,8 +170,8 @@ config:
       protocol: http
       host: localhost
       port: 5300
-    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
-    tenant_sub_domain: tenant.{{ tpl (.Values.domain) . }}
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
+    tenant_sub_domain: 'tenant.{{ tpl .Values.domain . }}'
     tenant_protocol: http
     worker_client:
       type: http
@@ -162,13 +183,12 @@ config:
       protocol: http
       host: localhost
       port: 5100
-    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
-
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
   #-- Logserver configuration
   logserver:
     log_db:
-      user: uc_root_user
-      password: dev-literal://uc87871fakepw
+      user: postgres
+      password: env://PG_PASSWORD
       dbname: status_00000000000000000000000000000000
       host: postgres
       dbdriver: postgres
@@ -178,7 +198,7 @@ config:
       protocol: http
       host: localhost
       port: 5500
-    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
 
   #-- Plex configuration
   plex:
@@ -187,15 +207,26 @@ config:
       protocol: http
       host: 0.0.0.0
       port: 5000
-    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
     disable_email: true
 
   #-- Root database configuration
   rootdb:
     db:
-      user: uc_root_user
-      password: dev-literal://uc87871fakepw
+      user: postgres
+      password: env://PG_PASSWORD
       dbname: defaultdb
+      host: postgres
+      dbdriver: postgres
+      dbproduct: postgres
+      port: 5432
+
+  #-- Root database status configuration
+  rootdbstatus:
+    db:
+      user: postgres
+      password: env://PG_PASSWORD
+      dbname: rootdbstatus
       host: postgres
       dbdriver: postgres
       dbproduct: postgres
@@ -204,8 +235,8 @@ config:
   #-- Worker configuration
   worker:
     log_db:
-      user: uc_root_user
-      password: dev-literal://uc87871fakepw
+      user: postgres
+      password: env://PG_PASSWORD
       dbname: status_00000000000000000000000000000000
       host: postgres
       dbdriver: postgres
@@ -215,7 +246,7 @@ config:
       protocol: http
       host: localhost
       port: 3012
-    console_tenant_id: {{ tpl (.Values.console_tenant_id) . }}
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
     dns:
       host_and_port: 1.1.1.1:53
     worker_client:

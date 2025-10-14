@@ -7,3 +7,4 @@ metadata:
 data:
     UC_REGION: {{ .Values.region | quote }}
     UC_UNIVERSE: {{ .Values.universe | quote }}
+    UC_SECRET_MANAGER: kubernetes

@@ -2,8 +2,6 @@
 
 # SHELL := /usr/bin/env bash
 
-export PATH=./bin:$PATH
-
 # NB: many of these up-front vars need to use := to ensure that we expand them once (immediately)
 # rather than re-running these (marginally expensive) commands each time the var is referenced
 
@@ -464,7 +462,8 @@ localdev-helm: helm-dep-update
 		--kube-context k3d-$(LOCALDEV_CLUSTER) \
 		--namespace userclouds \
 		--create-namespace \
-		--values helm/charts/values-localdev.yaml
+		--values helm/charts/userclouds/values.yaml \
+		--values helm/charts/userclouds/values-localdev.yaml
 
 ######################### deps ##########################
 deps: $(LOCALBIN) $(KUSTOMIZE)

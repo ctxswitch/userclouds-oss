@@ -8,6 +8,7 @@ import (
 	"userclouds.com/infra/secret/provider"
 )
 
+// getSecretPath returns a constructed path based on several attributes.
 func getSecretPath(uv universe.Universe, serviceName, name string) string {
 	// This used to differentiate paths between on-prem and the hosted cloud.  For OSS this
 	// isn't an issue anymore, so we just pass through the 'userclouds' prefixed path.

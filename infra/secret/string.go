@@ -264,14 +264,6 @@ func (s *String) GetProvider() (provider.Interface, error) {
 	return s.provider, nil
 }
 
-func (s *String) GetDefaultProvider() (provider.Interface, error) {
-	if s.provider != nil {
-		return s.provider, nil
-	}
-
-	return provider.FromEnv()
-}
-
 // WithProvider sets the provider that will be used for storing the secret.  Currently
 // the provider is intuited from the string location, but this allows us to override
 // it for location based discoveries.

@@ -12,10 +12,12 @@ const (
 	PrefixDevLiteral = "dev-literal://"
 )
 
+// Provider defines a development provider.
 type Provider struct {
 	decode bool
 }
 
+// New returns an initialized development provider.
 func New() *Provider {
 	return &Provider{
 		decode: true,
@@ -28,6 +30,10 @@ func (p *Provider) WithLiterals() *Provider {
 	return p
 }
 
+// Prefix returns the URI prefix for an inline development secret.  The dev provider
+// can take two forms.  The first, as dev which contains a base64 encoded secret and
+// second as dev-literal which contains an unencoded plain text secret.  These are used
+// in testing and should not be used in production services.
 func (p *Provider) Prefix() string {
 	// This is a bit naive, but at the moment dev only enables decode.
 	if p.decode {
@@ -37,6 +43,8 @@ func (p *Provider) Prefix() string {
 	return PrefixDevLiteral
 }
 
+// IsDev is a helper function that returns true if the provider is explicitly used
+// in development environments.  This allows for dev specific behaviors to be handled.
 func (p *Provider) IsDev() bool {
 	return true
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// Client is an interface that defines the required functions for the provider to
+// interact with the AWS secrets manager.  This mirrors the AWS SDK (v2)
 type Client interface {
 	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, opts ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 	CreateSecret(ctx context.Context, params *secretsmanager.CreateSecretInput, opts ...func(*secretsmanager.Options)) (*secretsmanager.CreateSecretOutput, error)
@@ -14,6 +16,8 @@ type Client interface {
 	DeleteSecret(ctx context.Context, params *secretsmanager.DeleteSecretInput, opts ...func(*secretsmanager.Options)) (*secretsmanager.DeleteSecretOutput, error)
 }
 
+// MockSecretsManagerClient is an implementation of the Client interface used
+// for testing.
 type MockSecretsManagerClient struct {
 	*secretsmanager.Client
 	mock.Mock

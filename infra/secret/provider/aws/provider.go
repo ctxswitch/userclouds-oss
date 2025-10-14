@@ -21,12 +21,13 @@ const (
 	DefaultSecretRecoveryWindowInDays = 7
 )
 
+// Provider is a SecretProvider implementation for AWS resources.
 type Provider struct {
 	client Client
 	region string
 }
 
-// Provider is a SecretProvider implementation for AWS resources.
+// New returns an initialized provider.
 // TODO: need to turn on multi-region replication for secret manager
 // TODO: need to turn on secret rotation
 // TODO: need to audit which creds have access to which secrets
@@ -34,20 +35,25 @@ func New() *Provider {
 	return &Provider{}
 }
 
-// WithSecretsmanagerClient sets the client to
+// WithSecretsManagerClient overrides the client.  This is generally used
+// for testing purposes.
 func (p *Provider) WithSecretsManagerClient(client Client) *Provider {
 	p.client = client
 	return p
 }
 
+// Prefix returns the URI prefix for a secret stored in the AWS secrets manager.
 func (p *Provider) Prefix() string {
 	return Prefix
 }
 
+// IsDev is a helper function that returns true if the provider is explicitly used
+// in development environments.  This allows for dev specific behaviors to be handled.
 func (p *Provider) IsDev() bool {
 	return false
 }
 
+// Get retrieves a secret version from a secret manager object and returns the value.
 func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	if err := p.initClient(ctx); err != nil {
 		return "", ucerr.Wrap(err)
@@ -76,6 +82,7 @@ func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	return secret, ucerr.Wrap(err)
 }
 
+// Save creates or updates a secret in the AWS secrets manager.
 func (p *Provider) Save(ctx context.Context, path, secret string) error {
 	if err := p.initClient(ctx); err != nil {
 		return ucerr.Wrap(err)
@@ -102,6 +109,7 @@ func (p *Provider) Save(ctx context.Context, path, secret string) error {
 	return ucerr.Wrap(err)
 }
 
+// Delete removes a secret from the AWS secrets manager.
 func (p *Provider) Delete(ctx context.Context, path string) error {
 	if err := p.initClient(ctx); err != nil {
 		return ucerr.Wrap(err)
@@ -112,6 +120,7 @@ func (p *Provider) Delete(ctx context.Context, path string) error {
 	return ucerr.Wrap(err)
 }
 
+// initClient is a helper that initializes the AWS client.
 func (p *Provider) initClient(ctx context.Context) error {
 	if p.client != nil {
 		return nil

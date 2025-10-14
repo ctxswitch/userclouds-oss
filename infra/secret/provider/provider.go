@@ -16,6 +16,8 @@ const (
 	SecretManagerEnvKey = "UC_SECRET_MANAGER"
 )
 
+// Interface defines the required functions needed for userclouds to interact
+// with secrets in an arbitrary environment.
 type Interface interface {
 	Get(ctx context.Context, path string) (string, error)
 	Delete(ctx context.Context, path string) error
@@ -23,8 +25,6 @@ type Interface interface {
 	Prefix() string
 	IsDev() bool
 }
-
-type Provider struct{}
 
 // FromEnv returns the discovered provider.  There are three that are supported
 // currently: 'aws', 'kube', and 'dev'.  This is not the best way to manage this.
@@ -54,6 +54,8 @@ func FromEnv() (Interface, error) {
 	return provider, nil
 }
 
+// FromLocation determines the appropriate provider to use based on the URI
+// scheme.
 func FromLocation(loc string) (Interface, error) {
 	// Get the prefix
 	px, err := prefix.PrefixFromString(loc)

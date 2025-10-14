@@ -14,16 +14,21 @@ const (
 
 var specialCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
+// Provider defines a new secrets provider.
 type Provider struct{}
 
+// New returns a new environment variable based secrets provider.
 func New() *Provider {
 	return &Provider{}
 }
 
+// Prefix returns the URI prefix for an environment variable based secret.
 func (p *Provider) Prefix() string {
 	return Prefix
 }
 
+// IsDev is a helper function that returns true if the provider is explicitly used
+// in development environments.  This allows for dev specific behaviors to be handled.
 func (p *Provider) IsDev() bool {
 	return false
 }

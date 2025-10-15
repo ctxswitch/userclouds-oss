@@ -22,9 +22,11 @@ enableCronJobs: false
 # Change to termination grace seconds.
 preStopSleepSeconds: 15
 
+roles: {}
+
 tools:
   enabled: true
-  serviceAccountName: provisioner
+  serviceAccountName: userclouds-admin
   resources:
     limits:
       cpu: 0.5
@@ -36,6 +38,7 @@ tools:
 #-- Plex service
 plex:
   replicas: 1
+  serviceAccountName: userclouds-read
   # pdb:
   #   minAvailable: 2
   resources:
@@ -48,6 +51,7 @@ plex:
 
 userstore:
   replicas: 1
+  serviceAccountName: userclouds-read
   # pdb:
   #   minAvailable: 2
   resources:
@@ -61,6 +65,7 @@ userstore:
 #-- Console service
 console:
   replicas: 1
+  serviceAccountName: userclouds-read
   # pdb:
   #   minAvailable: 2
   resources:
@@ -74,6 +79,7 @@ console:
 #-- Logserver service
 logserver:
   replicas: 1
+  serviceAccountName: userclouds-read
   # pdb:
   #   minAvailable: 2
   resources:
@@ -87,6 +93,10 @@ logserver:
 #-- Authz service
 authz:
   replicas: 1
+  serviceAccountName: userclouds-read
+  healthchecks: true
+  args:
+    - authz
   # pdb:
   #   minAvailable: 2
   resources:
@@ -99,7 +109,8 @@ authz:
 
 #-- Checkattributes service
 checkattribute:
-  enabled: true
+  enabled: false
+  serviceAccountName: userclouds-read
   replicas: 1
   # pdb:
   #   minAvailable: 2
@@ -115,6 +126,7 @@ checkattribute:
           cpu: 0.4
           memory: 128Mi
 
+# TODO: Pull out into common db components (at the very least the db config).
 config:
   #-- Authz service configuration
   authz:

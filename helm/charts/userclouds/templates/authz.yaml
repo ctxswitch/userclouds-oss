@@ -5,7 +5,9 @@ metadata:
   labels:
      {{- include "userclouds.labels" . | nindent 4 }}
   annotations:
-    eks.amazonaws.com/role-arn: {{ .Values.roles.authz }}
+    {{- with .Values.roles.authz }}
+    eks.amazonaws.com/role-arn: {{ toYaml . }}
+    {{- end }}
 
 ---
 apiVersion: apps/v1
@@ -15,7 +17,7 @@ metadata:
   labels:
     {{- include "userclouds.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.authz.replicas | default .Values.replicas }}
+  replicas: {{ .Values.authz.replicas | default .Values.authz.replicas }}
   selector:
     matchLabels:
       {{- include "authz.selectorLabels" . | nindent 6 }}
@@ -25,18 +27,14 @@ spec:
         userclouds.sla: critical
         {{- include "authz.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.authz.nodeSelector }}
       nodeSelector:
-        {{- include "userclouds.nodeSelector" . | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.authz.affinity }}
       affinity:
-        {{- include "userclouds.maybeNoT3Nodes" .Values.authz | nindent 8 }}
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              topologyKey: kubernetes.io/hostname
-              labelSelector:
-                matchLabels:
-                  {{- include "authz.selectorLabels" . | nindent 18 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ template "authz.serviceAccount" . }}
       volumes:
         - name: configmap
@@ -44,15 +42,27 @@ spec:
             name: userclouds-configs
             items:
               - key: base
-                path: {{ printf "base_%s.yaml" .Values.uc_universe }}
+                path: {{ printf "base_%s.yaml" .Values.universe }}
               - key: authz
-                path: {{ printf "authz/%s.yaml" .Values.uc_universe }}
+                path: {{ printf "authz/%s.yaml" .Values.universe }}
+      {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: authz
           image: "{{ include "userclouds.image" . }}"
           imagePullPolicy: IfNotPresent
+          {{- with .Values.tools.workingDir }}
+          workingDir: {{ toYaml . }}
+          {{- end }}
+          {{- with .Values.authz.command }}
+          command:
+            {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.authz.args }}
           args:
-            - authz
+            {{ toYaml . | nindent 12 }}
+          {{- end }}
           {{- include "userclouds.envConfigMap" . | nindent 10 }}
           env:
             {{- include "userclouds.envVars" . | nindent 10 }}
@@ -64,6 +74,9 @@ spec:
           volumeMounts:
             - name: configmap
               mountPath: /userclouds/configmaps
+          {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: authz
               containerPort: 5000
@@ -71,16 +84,18 @@ spec:
             - name: internal
               containerPort: 5001
               protocol: TCP
+          {{- if .Values.authz.healthchecks }}
           livenessProbe:
-            initialDelaySeconds: 15
+            initialDelaySeconds: 240
             httpGet:
               path: /healthcheck
               port: authz
           readinessProbe:
-            initialDelaySeconds: 15
+            initialDelaySeconds: 240
             httpGet:
               path: /healthcheck
               port: authz
+          {{- end }}
 
 ---
 apiVersion: v1

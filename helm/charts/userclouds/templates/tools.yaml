@@ -16,8 +16,12 @@ spec:
         userclouds.sla: critical
         {{- include "tools.selectorLabels" . | nindent 8 }}
     spec:
-      {{- with .Values.tools.nodeSelector }}
+      {{- with .Values.authz.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.authz.affinity }}
+      affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.tools.serviceAccountName }}
@@ -91,6 +95,6 @@ spec:
               mountPath: /userclouds/configmaps
             - name: provisioning
               mountPath: /userclouds/provisioning
-          {{- with .Values.extraVolumeMounts }}
+            {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}

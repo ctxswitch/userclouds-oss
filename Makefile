@@ -2,8 +2,6 @@
 
 # SHELL := /usr/bin/env bash
 
-export PATH=./bin:$PATH
-
 # NB: many of these up-front vars need to use := to ensure that we expand them once (immediately)
 # rather than re-running these (marginally expensive) commands each time the var is referenced
 
@@ -21,7 +19,7 @@ _PLEXUI_REACT_SRCS := $(shell find plex/plexui/src) $(shell find plex/plexui/pub
 
 SERVICE_BINARIES = bin/console bin/plex bin/idp bin/authz bin/checkattribute bin/logserver bin/dataprocessor bin/worker
 CODEGEN_BINARIES = bin/parallelgen bin/genconstant bin/gendbjson bin/genvalidate bin/genstringconstenum bin/genorm bin/genschemas bin/genevents bin/genrouting bin/genhandler bin/genopenapi bin/genpageable
-TOOL_BINARIES = bin/automatedprovisioner bin/azcli bin/cachelookup bin/cachetool bin/cleanplextokens bin/provision bin/setcompanytype bin/tenantcopy
+TOOL_BINARIES = bin/automatedprovisioner bin/azcli bin/cachelookup bin/cachetool bin/cleanplextokens bin/provision bin/setcompanytype bin/tenantcopy bin/ucctl
 
 TF_PATH = $(if $(TG_TF_PATH),$(TG_TF_PATH),"terraform")
 
@@ -464,7 +462,8 @@ localdev-helm: helm-dep-update
 		--kube-context k3d-$(LOCALDEV_CLUSTER) \
 		--namespace userclouds \
 		--create-namespace \
-		--values helm/charts/values-localdev.yaml
+		--values helm/charts/userclouds/values.yaml \
+		--values helm/charts/userclouds/values-localdev.yaml
 
 ######################### deps ##########################
 deps: $(LOCALBIN) $(KUSTOMIZE)

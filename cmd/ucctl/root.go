@@ -96,6 +96,7 @@ func CreateUserCommand() *cobra.Command {
 		RunE:  uc.RunE,
 	}
 
+	cmd.Flags().BoolVarP(&uc.Admin, "admin", "a", false, "Admin user")
 	cmd.Flags().BoolVarP(&uc.Verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().BoolVarP(&uc.UseContext, "use-context", "", false, "use current context from config")
 	cmd.Flags().StringVarP(&uc.URL, "url", "", "", "IDP URL (or use context)")

@@ -22,6 +22,7 @@ const (
 
 // UserCommand handles the create user subcommand
 type UserCommand struct {
+	Admin           bool
 	URL             string
 	ClientID        string
 	ClientSecret    string
@@ -54,6 +55,11 @@ func (c *UserCommand) RunE(cmd *cobra.Command, args []string) error {
 }
 
 func (c *UserCommand) validate() error {
+	// Organization is required.
+	if c.OrganizationID == "" {
+		return fmt.Errorf("organization id is required")
+	}
+
 	// If using context, load from config
 	if c.UseContext || (c.URL == "" && c.ClientID == "" && c.ClientSecret == "") {
 		cfg, err := config.Load()
@@ -143,16 +149,13 @@ func (c *UserCommand) createUser(ctx context.Context) error {
 		profile["name"] = c.Name
 	}
 
-	// Parse organization ID if provided
 	var opts []idp.Option
-	if c.OrganizationID != "" {
-		orgID, err := uuid.FromString(c.OrganizationID)
-		if err != nil {
-			spinner.Fail("Invalid organization ID")
-			return fmt.Errorf("invalid organization ID: %w", err)
-		}
-		opts = append(opts, idp.OrganizationID(orgID))
+	orgID, err := uuid.FromString(c.OrganizationID)
+	if err != nil {
+		spinner.Fail("Invalid organization ID")
+		return fmt.Errorf("invalid organization ID: %w", err)
 	}
+	opts = append(opts, idp.OrganizationID(orgID))
 
 	var userID uuid.UUID
 
@@ -206,3 +209,9 @@ func (c *UserCommand) createUser(ctx context.Context) error {
 
 	return nil
 }
+
+func (c *UserCommand) setAdmin(ctx context.Context) error {
+	// Set the user as an admin for the company/org.
+}
+
+// TODO: Allow for other policies.

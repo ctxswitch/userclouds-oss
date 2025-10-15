@@ -48,7 +48,7 @@ func (r *Root) Command() *cobra.Command {
 			_ = cmd.Help()
 		},
 		SilenceUsage:  true,
-		SilenceErrors: true,
+		SilenceErrors: false,
 	}
 
 	rootCmd.AddCommand(SyncCommand())

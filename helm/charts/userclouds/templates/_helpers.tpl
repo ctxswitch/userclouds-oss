@@ -23,11 +23,6 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/name: userclouds
 {{- end }}
 
-{{- define "userclouds.nodeSelector" -}}
-provisioner: karpenter
-kubernetes.io/arch: amd64
-{{- end }}
-
 {{- define "userclouds.workerClientConfig" -}}
 worker_client:
     type: sqs
@@ -105,7 +100,6 @@ Common env variables, usage in infra/kubernetes/helpers.go
 {{- define "userclouds.envConfigMap" -}}
 envFrom:
   - configMapRef:
-      # See terraform/modules/userclouds/serving/eks-k8s-resources/main.tf
       name: userclouds-env-variables
 {{- end }}
 
@@ -133,8 +127,13 @@ envFrom:
 {{- define "logserver.serviceAccount" -}}
 {{- printf "logserver"  }}
 {{- end }}
+
 {{- define "worker.serviceAccount" -}}
 {{- printf "worker"  }}
+{{- end }}
+
+{{- define "tools.serviceAccount" -}}
+{{- printf "tools"  }}
 {{- end }}
 
 {{/*
@@ -188,14 +187,37 @@ app.kubernetes.io/component: worker
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
+{{- define "tools.selectorLabels" -}}
+app.kubernetes.io/name: userclouds
+app.kubernetes.io/component: tools
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
 {{- define "userclouds.protocol" -}}
-https
+{{ .Values.protocol }}
+{{- end }}
+
+{{- define "userclouds.console.subdomain" -}}
+console.{{ tpl .Values.domain . }}
 {{- end }}
 
 {{- define "userclouds.console.url" -}}
-{{ include "userclouds.protocol" }}://console.{{ .Values.domain }}
+{{ include "userclouds.protocol" $ }}://console.{{ tpl .Values.domain . }}
 {{- end }}
 
 {{- define "userclouds.tenant.url" -}}
-{{ include "userclouds.protocol" }}://tenant.console.{{ .Values.domain }}
+{{ include "userclouds.protocol" $ }}://tenant.{{ tpl .Values.domain . }}
+{{- end }}
+
+{{- define "userclouds.envVars.googleAuth" -}}
+- name: GOOGLE_CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: userclouds-google-auth
+      key: client_id
+- name: GOOGLE_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: userclouds-google-auth
+      key: client_secret
 {{- end }}

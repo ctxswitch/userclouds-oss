@@ -1,11 +1,11 @@
 apiVersion: kubegres.reactive-tech.io/v1
 kind: Kubegres
 metadata:
-  name: cloud
-  namespace: db
+  name: postgres
+  namespace: userclouds
 spec:
   replicas: 1
-  image: postgres:15
+  image: postgres:14
   database:
     size: 200Mi
   env:

@@ -5,22 +5,36 @@ metadata:
   labels:
     {{- include "userclouds.labels" . | nindent 4 }}
 data:
-  base: |
-    {{- .Values.config.base | toYaml | nindent 4 }}
-  checkattribute: |
-    {{- .Values.config.checkattribute | toYaml | nindent 4 }}
-  authz: |
-    {{- .Values.config.authz | toYaml | nindent 4 }}
-  logserver: |
-    {{- .Values.config.logserver | toYaml | nindent 4 }}
-  idp: |
-    {{- .Values.config.idp | toYaml | nindent 4 }}
-  worker: |
-    {{- .Values.config.worker | toYaml | nindent 4 }}
-  console: |
-    {{- .Values.config.console | toYaml | nindent 4 }}
-  plex: |
-    {{- .Values.config.plex | toYaml | nindent 4 }}
+  {{- with .Values.config.base }}
+  base: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.checkattribute }}
+  checkattribute: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.authz }}
+  authz: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.logserver }}
+  logserver: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.idp }}
+  idp: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.worker }}
+  worker: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.console }}
+  console: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.plex }}
+  plex: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.rootdb }}
+  rootdb: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.rootdbstatus }}
+  rootdbstatus: | {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap

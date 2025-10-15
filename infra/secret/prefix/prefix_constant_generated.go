@@ -1,6 +1,6 @@
 // NOTE: automatically generated file -- DO NOT EDIT
 
-package secret
+package prefix
 
 import "userclouds.com/infra/ucerr"
 
@@ -15,6 +15,8 @@ func (t Prefix) MarshalText() ([]byte, error) {
 		return []byte("dev-literal://"), nil
 	case PrefixEnv:
 		return []byte("env://"), nil
+	case PrefixKubernetes:
+		return []byte("kube://secrets/"), nil
 	default:
 		return nil, ucerr.Friendlyf(nil, "unknown Prefix value '%s'", t)
 	}
@@ -32,6 +34,8 @@ func (t *Prefix) UnmarshalText(b []byte) error {
 		*t = PrefixDevLiteral
 	case "env://":
 		*t = PrefixEnv
+	case "kube://secrets/":
+		*t = PrefixKubernetes
 	default:
 		return ucerr.Friendlyf(nil, "unknown Prefix value '%s'", s)
 	}
@@ -49,6 +53,8 @@ func (t *Prefix) Validate() error {
 		return nil
 	case PrefixEnv:
 		return nil
+	case PrefixKubernetes:
+		return nil
 	default:
 		return ucerr.Friendlyf(nil, "unknown Prefix value '%s'", *t)
 	}
@@ -61,6 +67,7 @@ func (t Prefix) Enum() []any {
 		"dev://",
 		"dev-literal://",
 		"env://",
+		"kube://secrets/",
 	}
 }
 
@@ -70,4 +77,5 @@ var AllPrefixes = []Prefix{
 	PrefixDev,
 	PrefixDevLiteral,
 	PrefixEnv,
+	PrefixKubernetes,
 }

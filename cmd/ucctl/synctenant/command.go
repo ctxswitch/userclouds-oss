@@ -3,9 +3,11 @@ package synctenant
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
 	"time"
+
+	"github.com/spf13/cobra"
+
 	"userclouds.com/infra/logtransports"
 	"userclouds.com/infra/uclog"
 )

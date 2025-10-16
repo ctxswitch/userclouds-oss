@@ -210,6 +210,11 @@ func (s String) Validate() error {
 		return nil
 	}
 
+	// support inline secrets with no prefix
+	if !s.HasPrefix() {
+		return nil
+	}
+
 	px, err := prefix.PrefixFromString(s.location)
 	if err != nil {
 		return ucerr.Wrap(err)

@@ -211,7 +211,7 @@ func (c *UserCommand) createUser(ctx context.Context) error {
 }
 
 func (c *UserCommand) setAdmin(ctx context.Context) error {
-	// Set the user as an admin for the company/org.
+	return nil
 }
 
 // TODO: Allow for other policies.

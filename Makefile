@@ -19,7 +19,7 @@ _PLEXUI_REACT_SRCS := $(shell find plex/plexui/src) $(shell find plex/plexui/pub
 
 SERVICE_BINARIES = bin/console bin/plex bin/idp bin/authz bin/checkattribute bin/logserver bin/dataprocessor bin/worker
 CODEGEN_BINARIES = bin/parallelgen bin/genconstant bin/gendbjson bin/genvalidate bin/genstringconstenum bin/genorm bin/genschemas bin/genevents bin/genrouting bin/genhandler bin/genopenapi bin/genpageable
-TOOL_BINARIES = bin/automatedprovisioner bin/azcli bin/cachelookup bin/cachetool bin/cleanplextokens bin/provision bin/setcompanytype bin/tenantcopy
+TOOL_BINARIES = bin/automatedprovisioner bin/azcli bin/cachelookup bin/cachetool bin/cleanplextokens bin/provision bin/setcompanytype bin/tenantcopy bin/ucctl
 
 TF_PATH = $(if $(TG_TF_PATH),$(TG_TF_PATH),"terraform")
 

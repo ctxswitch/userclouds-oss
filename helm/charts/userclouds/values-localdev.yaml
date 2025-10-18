@@ -17,15 +17,55 @@ authz:
   command:
     - go
     - run
-    - ./authz/cmd/main.go
-  args: ""
-  resources:
-    limits:
-      cpu: 2
-      memory: 2048Mi
-    requests:
-      cpu: 2
-      memory: 2048Mi
+    - ./userclouds/cmd/main.go
+  livenessProbe:
+    initialDelaySeconds: 180
+  readinessProbe:
+    initialDelaySeconds: 180
+
+worker:
+  workingDir: /usr/src/app
+  command:
+    - go
+    - run
+    - ./userclouds/cmd/main.go
+  livenessProbe:
+    initialDelaySeconds: 180
+  readinessProbe:
+    initialDelaySeconds: 180
+
+plex:
+  workingDir: /usr/src/app
+  command:
+    - go
+    - run
+    - ./userclouds/cmd/main.go
+  livenessProbe:
+    initialDelaySeconds: 180
+  readinessProbe:
+    initialDelaySeconds: 180
+
+console:
+  workingDir: /usr/src/app
+  command:
+    - go
+    - run
+    - ./userclouds/cmd/main.go
+  livenessProbe:
+    initialDelaySeconds: 180
+  readinessProbe:
+    initialDelaySeconds: 180
+
+userstore:
+  workingDir: /usr/src/app
+  command:
+    - go
+    - run
+    - ./userclouds/cmd/main.go
+  livenessProbe:
+    initialDelaySeconds: 180
+  readinessProbe:
+    initialDelaySeconds: 180
 
 # Local directory that is mounted through k3d
 extraVolumes:

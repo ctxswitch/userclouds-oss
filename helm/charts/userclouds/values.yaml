@@ -28,84 +28,151 @@ tools:
   enabled: true
   serviceAccountName: userclouds-admin
   resources:
-    limits:
-      cpu: 0.5
-      memory: 256Mi
     requests:
       cpu: 0.4
-      memory: 128Mi
+      memory: 512Mi
 
 #-- Plex service
 plex:
   replicas: 1
   serviceAccountName: userclouds-read
+  args:
+    - plex
   # pdb:
   #   minAvailable: 2
   resources:
-    limits:
-      cpu: 0.5
-      memory: 256Mi
     requests:
       cpu: 0.4
-      memory: 128Mi
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: plex
+  readinessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: plex
 
 userstore:
   replicas: 1
   serviceAccountName: userclouds-read
+  args:
+    - idp
   # pdb:
   #   minAvailable: 2
   resources:
-    limits:
-      cpu: 0.5
-      memory: 256Mi
     requests:
       cpu: 0.4
-      memory: 128Mi
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: userstore
+  readinessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: userstore
 
 #-- Console service
 console:
   replicas: 1
   serviceAccountName: userclouds-read
+  args:
+    - console
   # pdb:
   #   minAvailable: 2
   resources:
-    limits:
-      cpu: 0.5
-      memory: 256Mi
     requests:
       cpu: 0.4
-      memory: 128Mi
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: console
+  readinessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: console
 
 #-- Logserver service
 logserver:
   replicas: 1
   serviceAccountName: userclouds-read
+  args:
+    - logserver
   # pdb:
   #   minAvailable: 2
   resources:
-    limits:
-      cpu: 0.5
-      memory: 256Mi
     requests:
       cpu: 0.4
-      memory: 128Mi
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: logserver
+  readinessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: logserver
 
 #-- Authz service
 authz:
   replicas: 1
   serviceAccountName: userclouds-read
-  healthchecks: true
   args:
     - authz
   # pdb:
   #   minAvailable: 2
   resources:
-    limits:
-      cpu: 0.5
-      memory: 256Mi
     requests:
       cpu: 0.4
-      memory: 128Mi
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: authz
+  readinessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: authz
+
+#-- Worker service
+worker:
+  replicas: 1
+  serviceAccountName: userclouds-read
+  args:
+    - worker
+  # pdb:
+  #   minAvailable: 2
+  resources:
+    requests:
+      cpu: 0.4
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 30
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    httpGet:
+      path: /healthcheck
+      port: worker
+    successThreshold: 1
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    httpGet:
+      path: /healthcheck
+      port: worker
 
 #-- Checkattributes service
 checkattribute:
@@ -115,6 +182,16 @@ checkattribute:
   # pdb:
   #   minAvailable: 2
   #-- TODO: figure out what this is for.
+  livenessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: checkattribute
+  readinessProbe:
+    initialDelaySeconds: 30
+    httpGet:
+      path: /healthcheck
+      port: checkattribute
   deployments:
     - name: envtest
       replicas: 1
@@ -124,16 +201,12 @@ checkattribute:
           memory: 256Mi
         requests:
           cpu: 0.4
-          memory: 128Mi
+          memory: 512Mi
 
 # TODO: Pull out into common db components (at the very least the db config).
 config:
   #-- Authz service configuration
   authz:
-    svc_listener:
-      protocol: http
-      host: localhost
-      port: 5100
     console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
   #-- Base
   base:
@@ -145,14 +218,16 @@ config:
       dbdriver: postgres
       dbproduct: postgres
       port: 5432
-    internal_server: null
+    svc_listener:
+      protocol: http
+      host: 0.0.0.0
+      port: 5000
+    internal_server:
+      protocol: http
+      host: 0.0.0.0
+      port: 5001
     logger:
       transports:
-        - type: file
-          base_filename: /userclouds/logs/
-          transportconfig:
-            required: true
-            max_log_level: 5
         - type: goLogJSON
           transportconfig:
             required: true
@@ -160,10 +235,6 @@ config:
 
   #-- Checkattribute service configuration
   checkattribute:
-    svc_listener:
-      protocol: http
-      host: localhost
-      port: 5210
     console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
 
   #-- Console service configuration
@@ -178,10 +249,6 @@ config:
       dbdriver: postgres
       dbproduct: postgres
       port: 5432
-    svc_listener:
-      protocol: http
-      host: localhost
-      port: 5300
     console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
     tenant_sub_domain: 'tenant.{{ tpl .Values.domain . }}'
     tenant_protocol: http
@@ -191,10 +258,6 @@ config:
 
   #-- IDP service configuration
   idp:
-    svc_listener:
-      protocol: http
-      host: localhost
-      port: 5100
     console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
   #-- Logserver configuration
   logserver:
@@ -214,13 +277,11 @@ config:
 
   #-- Plex configuration
   plex:
-    static_assets_path: /userclouds/uiassets/plex/
-    svc_listener:
-      protocol: http
-      host: 0.0.0.0
-      port: 5000
     console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
+    static_assets_path: /userclouds/uiassets/plex/
     disable_email: true
+    worker_client:
+      type: http
 
   #-- Root database configuration
   rootdb:
@@ -254,13 +315,19 @@ config:
       dbdriver: postgres
       dbproduct: postgres
       port: 5432
-    svc_listener:
-      protocol: http
-      host: localhost
-      port: 3012
-    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
     dns:
       host_and_port: 1.1.1.1:53
+    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
     worker_client:
       type: http
       url: http://localhost:3012
+#    svc_listener:
+#      protocol: http
+#      host: localhost
+#      port: 3012
+#    console_tenant_id: '{{ tpl .Values.console_tenant_id . }}'
+#    dns:
+#      host_and_port: 1.1.1.1:53
+#    worker_client:
+#      type: http
+#      url: http://localhost:3012

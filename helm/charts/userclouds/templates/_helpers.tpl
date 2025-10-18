@@ -95,6 +95,10 @@ Common env variables, usage in infra/kubernetes/helpers.go
       fieldPath: status.podIP
 - name: UC_CONFIG_DIR
   value: /userclouds/configmaps
+- name: GOMEMLIMIT
+  valueFrom:
+    resourceFieldRef:
+      resource: limits.memory
 {{- end }}
 
 {{- define "userclouds.envConfigMap" -}}

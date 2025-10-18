@@ -1,42 +1,42 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ template "authz.serviceAccount" . }}
+  name: {{ template "worker.serviceAccount" . }}
   labels:
     {{- include "userclouds.labels" . | nindent 4 }}
   annotations:
-    {{- with .Values.roles.authz }}
+    {{- with .Values.roles.worker }}
     eks.amazonaws.com/role-arn: {{ toYaml . }}
     {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: authz
+  name: worker
   labels:
     {{- include "userclouds.labels" . | nindent 4 }}
   annotations:
     checksum/config: {{ include (print $.Template.BasePath "/configs.yaml") . | sha256sum }}
 spec:
-  replicas: {{ .Values.authz.replicas | default .Values.authz.replicas }}
+  replicas: {{ .Values.worker.replicas | default .Values.worker.replicas }}
   selector:
     matchLabels:
-      {{- include "authz.selectorLabels" . | nindent 6 }}
+      {{- include "worker.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
         userclouds.sla: critical
-        {{- include "authz.selectorLabels" . | nindent 8 }}
+        {{- include "worker.selectorLabels" . | nindent 8 }}
     spec:
-      {{- with .Values.authz.nodeSelector }}
+      {{- with .Values.worker.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.authz.affinity }}
+      {{- with .Values.worker.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.authz.serviceAccountName }}
+      {{- with .Values.worker.serviceAccountName }}
       serviceAccountName: {{ toYaml . }}
       {{- end }}
       volumes:
@@ -46,23 +46,23 @@ spec:
             items:
               - key: base
                 path: {{ printf "base_%s.yaml" .Values.universe }}
-              - key: authz
-                path: {{ printf "authz/%s.yaml" .Values.universe }}
+              - key: worker
+                path: {{ printf "worker/%s.yaml" .Values.universe }}
       {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: authz
+        - name: worker
           image: "{{ include "userclouds.image" . }}"
           imagePullPolicy: IfNotPresent
           {{- with .Values.tools.workingDir }}
           workingDir: {{ toYaml . }}
           {{- end }}
-          {{- with .Values.authz.command }}
+          {{- with .Values.worker.command }}
           command:
             {{ toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.authz.args }}
+          {{- with .Values.worker.args }}
           args:
             {{ toYaml . | nindent 12 }}
           {{- end }}
@@ -72,7 +72,7 @@ spec:
             {{- with .Values.extraEnv }}
             {{ toYaml . | nindent 10 }}
             {{- end }}
-          {{- with .Values.authz.resources }}
+          {{- with .Values.worker.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -84,17 +84,17 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
-            - name: authz
+            - name: worker
               containerPort: 5000
               protocol: TCP
             - name: internal
               containerPort: 5001
               protocol: TCP
-          {{- with .Values.authz.livenessProbe }}
+          {{- with .Values.worker.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.authz.livenessProbe }}
+          {{- with .Values.worker.livenessProbe }}
           readinessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -102,13 +102,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: authz
+  name: worker
   labels:
     {{- include "userclouds.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-      {{- include "authz.selectorLabels" . | nindent 6 }}
+      {{- include "worker.selectorLabels" . | nindent 6 }}
   ports:
     - name: service
       protocol: TCP

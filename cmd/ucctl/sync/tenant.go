@@ -344,13 +344,13 @@ func (r *resources) insert(ctx context.Context, azc *authz.Client, verbose bool)
 
 	if len(r.objectTypes) > 0 {
 		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Inserting %d object types...", len(r.objectTypes)))
-		for _, ot := range r.objectTypes {
+		for i, ot := range r.objectTypes {
 			if verbose {
-				spinner.UpdateText(fmt.Sprintf("Inserting object type: %s", ot.TypeName))
+				spinner.UpdateText(fmt.Sprintf("Inserting object type: %d/%d", i+1, len(r.objectTypes)))
 			}
 			if _, err := azc.CreateObjectType(ctx, ot.ID, ot.TypeName); err != nil {
-				spinner.Fail(fmt.Sprintf("Failed to insert object type: %s", ot.TypeName))
-				return fmt.Errorf("failed to create object type %s: %w", ot.TypeName, err)
+				spinner.Fail(fmt.Sprintf("Failed to insert object type: %s", ot.ID.String()))
+				return fmt.Errorf("failed to create object type %s: %w", ot.ID.String(), err)
 			}
 		}
 		spinner.Success(fmt.Sprintf("Inserted %d object types", len(r.objectTypes)))
@@ -358,13 +358,19 @@ func (r *resources) insert(ctx context.Context, azc *authz.Client, verbose bool)
 
 	if len(r.objects) > 0 {
 		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Inserting %d objects...", len(r.objects)))
-		for _, o := range r.objects {
+		for i, o := range r.objects {
 			if verbose {
-				spinner.UpdateText(fmt.Sprintf("Inserting object: %s", *o.Alias))
+				spinner.UpdateText(fmt.Sprintf("Inserting object: %d/%d", i+1, len(r.objects)))
 			}
-			if _, err := azc.CreateObject(ctx, o.ID, o.TypeID, *o.Alias); err != nil {
-				spinner.Fail(fmt.Sprintf("Failed to insert object: %s", *o.Alias))
-				return fmt.Errorf("failed to create object %s: %w", *o.Alias, err)
+
+			var alias string
+			if o.Alias != nil {
+				alias = *o.Alias
+			}
+
+			if _, err := azc.CreateObject(ctx, o.ID, o.TypeID, alias); err != nil {
+				spinner.Fail(fmt.Sprintf("Failed to insert object: %s", o.ID.String()))
+				return fmt.Errorf("failed to create object %s: %w", o.ID.String(), err)
 			}
 		}
 		spinner.Success(fmt.Sprintf("Inserted %d objects", len(r.objects)))
@@ -372,13 +378,13 @@ func (r *resources) insert(ctx context.Context, azc *authz.Client, verbose bool)
 
 	if len(r.edgeTypes) > 0 {
 		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Inserting %d edge types...", len(r.edgeTypes)))
-		for _, et := range r.edgeTypes {
+		for i, et := range r.edgeTypes {
 			if verbose {
-				spinner.UpdateText(fmt.Sprintf("Inserting edge type: %s", et.TypeName))
+				spinner.UpdateText(fmt.Sprintf("Inserting edge type: %d/%d", i+1, len(r.edgeTypes)))
 			}
 			if _, err := azc.CreateEdgeType(ctx, et.ID, et.SourceObjectTypeID, et.TargetObjectTypeID, et.TypeName, et.Attributes); err != nil {
-				spinner.Fail(fmt.Sprintf("Failed to insert edge type: %s", et.TypeName))
-				return fmt.Errorf("failed to create edge type %s: %w", et.TypeName, err)
+				spinner.Fail(fmt.Sprintf("Failed to insert edge type: %s", et.ID.String()))
+				return fmt.Errorf("failed to create edge type %s: %w", et.ID.String(), err)
 			}
 		}
 		spinner.Success(fmt.Sprintf("Inserted %d edge types", len(r.edgeTypes)))
@@ -391,8 +397,8 @@ func (r *resources) insert(ctx context.Context, azc *authz.Client, verbose bool)
 				spinner.UpdateText(fmt.Sprintf("Inserting edge %d/%d", i+1, len(r.edges)))
 			}
 			if _, err := azc.CreateEdge(ctx, e.ID, e.SourceObjectID, e.TargetObjectID, e.EdgeTypeID); err != nil {
-				spinner.Fail("Failed to insert edge")
-				return fmt.Errorf("failed to create edge: %w", err)
+				spinner.Fail("Failed to insert edge: %s", e.ID.String())
+				return fmt.Errorf("failed to create edge %s: %w", e.ID.String(), err)
 			}
 		}
 		spinner.Success(fmt.Sprintf("Inserted %d edges", len(r.edges)))
@@ -411,7 +417,7 @@ func (r *resources) delete(ctx context.Context, azc *authz.Client, verbose bool)
 				spinner.UpdateText(fmt.Sprintf("Deleting edge %d/%d", i+1, len(r.edges)))
 			}
 			if err := azc.DeleteEdge(ctx, e.ID); err != nil {
-				spinner.Fail("Failed to delete edge")
+				spinner.Fail("Failed to delete edge: %s", e.ID.String())
 				return fmt.Errorf("failed to delete edge: %w", err)
 			}
 		}
@@ -420,13 +426,13 @@ func (r *resources) delete(ctx context.Context, azc *authz.Client, verbose bool)
 
 	if len(r.edgeTypes) > 0 {
 		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Deleting %d edge types...", len(r.edgeTypes)))
-		for _, et := range r.edgeTypes {
+		for i, et := range r.edgeTypes {
 			if verbose {
-				spinner.UpdateText(fmt.Sprintf("Deleting edge type: %s", et.TypeName))
+				spinner.UpdateText(fmt.Sprintf("Deleting edge type: %d/%d", i+1, len(r.edgeTypes)))
 			}
 			if err := azc.DeleteEdgeType(ctx, et.ID); err != nil {
-				spinner.Fail(fmt.Sprintf("Failed to delete edge type: %s", et.TypeName))
-				return fmt.Errorf("failed to delete edge type %s: %w", et.TypeName, err)
+				spinner.Fail(fmt.Sprintf("Failed to delete edge type: %s", et.ID.String()))
+				return fmt.Errorf("failed to delete edge type %s: %w", et.ID.String(), err)
 			}
 		}
 		spinner.Success(fmt.Sprintf("Deleted %d edge types", len(r.edgeTypes)))
@@ -434,12 +440,12 @@ func (r *resources) delete(ctx context.Context, azc *authz.Client, verbose bool)
 
 	if len(r.objects) > 0 {
 		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Deleting %d objects...", len(r.objects)))
-		for _, o := range r.objects {
+		for i, o := range r.objects {
 			if verbose {
-				spinner.UpdateText(fmt.Sprintf("Deleting object: %s", *o.Alias))
+				spinner.UpdateText(fmt.Sprintf("Deleting object: %d/%d", i+1, len(r.objects)))
 			}
 			if err := azc.DeleteObject(ctx, o.ID); err != nil {
-				spinner.Fail(fmt.Sprintf("Failed to delete object: %s", *o.Alias))
+				spinner.Fail(fmt.Sprintf("Failed to delete object: %s", o.ID.String()))
 				return fmt.Errorf("failed to delete object: %w", err)
 			}
 		}
@@ -448,13 +454,13 @@ func (r *resources) delete(ctx context.Context, azc *authz.Client, verbose bool)
 
 	if len(r.objectTypes) > 0 {
 		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Deleting %d object types...", len(r.objectTypes)))
-		for _, ot := range r.objectTypes {
+		for i, ot := range r.objectTypes {
 			if verbose {
-				spinner.UpdateText(fmt.Sprintf("Deleting object type: %s", ot.TypeName))
+				spinner.UpdateText(fmt.Sprintf("Deleting object type: %d/%d", i+1, len(r.objectTypes)))
 			}
 			if err := azc.DeleteObjectType(ctx, ot.ID); err != nil {
-				spinner.Fail(fmt.Sprintf("Failed to delete object type: %s", ot.TypeName))
-				return fmt.Errorf("failed to delete object type %s: %w", ot.TypeName, err)
+				spinner.Fail(fmt.Sprintf("Failed to delete object type: %s", ot.ID.String()))
+				return fmt.Errorf("failed to delete object type: %w", err)
 			}
 		}
 		spinner.Success(fmt.Sprintf("Deleted %d object types", len(r.objectTypes)))

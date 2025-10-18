@@ -114,6 +114,7 @@ func provisionConsoleTenant(ctx context.Context, companyStorage *companyconfig.S
 	return nil
 }
 
+// TODO: these load functions get pulled out and we pass args to the template.
 func loadTenantFile(ctx context.Context, basePath string, customerDomain, companyName, googleClientID, adminUserEmail string) (*types.TenantFile, error) {
 	var tf types.TenantFile
 	tmpl, err := template.ParseFiles(filepath.Join(basePath, "tenant_console.json.tmpl"))
@@ -144,6 +145,7 @@ func loadTenantFile(ctx context.Context, basePath string, customerDomain, compan
 	return &tf, nil
 }
 
+// TODO: Get provisioning data from the command line or environment.  This moves into a validate step.
 func loadProvisionData(ctx context.Context, basePath string) (*companyconfig.Company, *types.TenantFile, error) {
 	companyName, err := lookupEnvVariable("COMPANY_NAME")
 	if err != nil {

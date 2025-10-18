@@ -9,18 +9,21 @@ import (
 )
 
 const (
-	RootUsage       = "ucctl"
-	RootShort       = "CLI utility for interacting with userclouds"
-	RootLong        = `CLI utility for interacting with userclouds`
-	SyncUsage       = "sync"
-	SyncShort       = "Sync resources between environments"
-	SyncLong        = `Sync UserClouds resources between different environments`
-	CreateUsage     = "create"
-	CreateShort     = "Create userclouds resources"
-	CreateLong      = `Create userclouds resources`
-	CreateUserUsage = "user"
-	CreateUserShort = "Create a new user with or without authentication"
-	CreateUserLong  = `Create a new user with password authentication, OIDC authentication, or without authentication.
+	RootUsage          = "ucctl"
+	RootShort          = "CLI utility for interacting with userclouds"
+	RootLong           = `CLI utility for interacting with userclouds`
+	AutoProvisionUsage = "autoprovision"
+	AutoProvisionShort = "Autoprovision a the console tenant"
+	AutoProvisionLong  = `Autoprovision the base company and console tenant.  Runs `
+	SyncUsage          = "sync"
+	SyncShort          = "Sync resources between environments"
+	SyncLong           = `Sync UserClouds resources between different environments`
+	CreateUsage        = "create"
+	CreateShort        = "Create userclouds resources"
+	CreateLong         = `Create userclouds resources`
+	CreateUserUsage    = "user"
+	CreateUserShort    = "Create a new user with or without authentication"
+	CreateUserLong     = `Create a new user with password authentication, OIDC authentication, or without authentication.
 
 When creating a user without authentication, the authentication will be automatically
 added when the user logs in for the first time via OIDC (based on email match).`

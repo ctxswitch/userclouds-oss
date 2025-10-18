@@ -125,6 +125,8 @@ func bootstrapDB(ctx context.Context, rootDBCfg, rootdbstatus *ucdb.Config) erro
 	return nil
 }
 
+// TODO: this belongs in the tenant provisioner so the normal provisioning command can take advantage
+// of it as well.
 func createDBIfNotExists(ctx context.Context, pgDB *ucdb.DB, dbName string) error {
 	isDBExits := fmt.Sprintf(`
 	/* bypass-known-table-check */
@@ -290,7 +292,7 @@ func migrateTenants(ctx context.Context, companyConfigSD, serviceDataTenantDB *m
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					// We have a row in the tenants table but are missing a row in the tenant IDP table
-					//TODO: let the caller know we had issues.
+					// TODO: let the caller know we had issues.
 					uclog.Infof(ctx, "Migrating %v: Couldn't find tenants_internal row for tenant (%s), Skipped", t.ID, t.Name)
 					continue
 				} else {

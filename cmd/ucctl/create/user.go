@@ -191,27 +191,27 @@ func (c *UserCommand) createUser(ctx context.Context) error {
 
 	spinner.Success("User created successfully")
 
-	// Display user details
-	pterm.Println()
-	pterm.DefaultBox.WithTitle("User Created").WithTitleTopCenter().Println(
-		pterm.Sprintf("User ID: %s\nEmail: %s\nName: %s",
-			pterm.LightCyan(userID.String()),
-			pterm.LightCyan(c.Email),
-			pterm.LightCyan(c.Name)))
-
-	if c.Username == "" && c.OIDCProvider == "" {
+	if c.Verbose {
 		pterm.Println()
-		pterm.Info.Println("User was created without authentication")
-		pterm.DefaultParagraph.Println(
-			"When the user logs in for the first time via OIDC (e.g., Google), " +
-				"the system will automatically link the OIDC authentication to this account based on email match.")
+		pterm.DefaultBox.WithTitle("User Created").WithTitleTopCenter().Println(
+			pterm.Sprintf("User ID: %s\nEmail: %s\nName: %s",
+				pterm.LightCyan(userID.String()),
+				pterm.LightCyan(c.Email),
+				pterm.LightCyan(c.Name)),
+		)
+	}
+
+	// TODO: Allow for other policies.
+	if c.Admin {
+		err := c.setAdmin(ctx, userID)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (c *UserCommand) setAdmin(ctx context.Context) error {
+func (c *UserCommand) setAdmin(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
-
-// TODO: Allow for other policies.

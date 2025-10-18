@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -31,6 +32,10 @@ type Context struct {
 	ClientID string `yaml:"client_id"`
 	// ClientSecret is the OAuth2 client secret
 	ClientSecret string `yaml:"client_secret"`
+	// ConsoleTenant is the name of the console tenant context to use (for regular tenant contexts)
+	ConsoleTenant string `yaml:"console,omitempty"`
+	// IsConsoleTenant indicates if this context represents a console tenant
+	IsConsoleTenant bool `yaml:"console_tenant,omitempty"`
 }
 
 // GetConfigPath returns the path to the config file
@@ -141,6 +146,18 @@ func (c *Config) DeleteContext(name string) error {
 		return fmt.Errorf("context %q not found", name)
 	}
 
+	// Only delete the context if it has no references
+	tenants := make([]string, 0)
+	for name, ctx := range c.Contexts {
+		if ctx.ConsoleTenant == name {
+			tenants = append(tenants, name)
+		}
+	}
+
+	if len(tenants) != 0 {
+		return fmt.Errorf("context %q still has referenced tenants [%q]", name, strings.Join(tenants, ","))
+	}
+
 	delete(c.Contexts, name)
 
 	// If the deleted context was the current context, unset it
@@ -158,4 +175,28 @@ func (c *Config) UseContext(name string) error {
 	}
 	c.CurrentContext = name
 	return nil
+}
+
+// GetConsoleTenantContext returns the console tenant context for the given context
+// If the context is itself a console tenant, it returns the context itself
+// Otherwise, it resolves the console tenant reference
+func (c *Config) GetConsoleTenantContext(ctx *Context) (*Context, error) {
+	if ctx.IsConsoleTenant {
+		return ctx, nil
+	}
+
+	if ctx.ConsoleTenant == "" {
+		return nil, fmt.Errorf("context does not have a console tenant reference")
+	}
+
+	consoleTenant, err := c.GetContext(ctx.ConsoleTenant)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve console tenant %q: %w", ctx.ConsoleTenant, err)
+	}
+
+	if !consoleTenant.IsConsoleTenant {
+		return nil, fmt.Errorf("referenced context %q is not a console tenant", ctx.ConsoleTenant)
+	}
+
+	return consoleTenant, nil
 }

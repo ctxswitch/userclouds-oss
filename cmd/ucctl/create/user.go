@@ -72,7 +72,7 @@ func (c *UserCommand) validate() error {
 			return fmt.Errorf("no current context set. Use 'ucctl context use <name>' or provide --url, --client-id, and --client-secret")
 		}
 
-		// Only override if not explicitly set
+		// Use current context directly - it should be set to the appropriate tenant
 		if c.URL == "" {
 			c.URL = ctx.URL
 		}

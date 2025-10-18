@@ -22,6 +22,12 @@ go install ./cmd/ucctl
 
 The context commands manage UserClouds environment configurations, similar to `kubectl` contexts in Kubernetes. Contexts store connection information (URL, client ID, and client secret) for different UserClouds installations.
 
+UserClouds has two types of contexts:
+- **Console Tenant Contexts**: For managing console employees and companies
+- **Regular Tenant Contexts**: For managing tenant-specific users and resources
+
+Regular tenant contexts reference a console tenant context by name, avoiding credential duplication when multiple tenants share the same console.
+
 #### `ucctl context` (alias: `ctx`)
 
 Manage UserClouds contexts for different environments.
@@ -30,7 +36,7 @@ Manage UserClouds contexts for different environments.
 
 ##### `ucctl context list`
 
-List all configured contexts. Shows which context is currently active with a `*` indicator.
+List all configured contexts. Shows which context is currently active with a `*` indicator, plus the context type (console or tenant).
 
 ```bash
 ucctl context list
@@ -40,9 +46,10 @@ ucctl ctx list
 
 **Example output:**
 ```
-CURRENT   NAME    URL                           CLIENT-ID
-*         local   http://localhost:8080         test-client
-          prod    https://prod.userclouds.com   prod-client
+CURRENT   NAME            TYPE      URL
+*         console-prod    console   https://console.userclouds.com
+          tenant-foo      tenant    https://foo.userclouds.com
+          tenant-bar      tenant    https://bar.userclouds.com
 ```
 
 ##### `ucctl context set <context-name>`
@@ -53,23 +60,42 @@ Create or update a context configuration.
 - `--url` (required) - UserClouds base URL
 - `--client-id` (required) - OAuth2 client ID
 - `--client-secret` (required) - OAuth2 client secret
+- `--console` - Console tenant context name (required for regular tenant contexts)
+- `--console-tenant` - Mark this context as a console tenant
+
+**Creating a Console Tenant Context:**
 
 ```bash
-ucctl context set local \
-  --url http://localhost:8080 \
-  --client-id my-client \
-  --client-secret my-secret
+ucctl context set console-prod \
+  --url https://console.userclouds.com \
+  --client-id console-client \
+  --client-secret console-secret \
+  --console-tenant
+```
 
-ucctl ctx set prod \
-  --url https://prod.userclouds.com \
-  --client-id prod-client \
-  --client-secret prod-secret
+**Creating a Regular Tenant Context:**
+
+```bash
+ucctl context set tenant-foo \
+  --url https://foo.userclouds.com \
+  --client-id foo-client \
+  --client-secret foo-secret \
+  --console console-prod
+
+ucctl ctx set tenant-bar \
+  --url https://bar.userclouds.com \
+  --client-id bar-client \
+  --client-secret bar-secret \
+  --console console-prod
 ```
 
 **Notes:**
 - If this is the first context, it will automatically become the current context
 - Context configurations are stored in `~/.userclouds/config.yaml`
 - Client secrets are stored in plain text in the config file
+- Console tenant contexts cannot reference other consoles (`--console` and `--console-tenant` are mutually exclusive)
+- Regular tenant contexts must reference a console tenant via `--console`
+- Multiple tenant contexts can share the same console tenant, avoiding credential duplication
 
 ##### `ucctl context use <context-name>`
 
@@ -89,11 +115,24 @@ Display the currently active context with connection details.
 ucctl context show
 ```
 
-**Example output:**
+**Example output for a regular tenant context:**
 ```
-Current context: prod
-URL: https://prod.userclouds.com
-Client ID: prod-client
+Current context: tenant-foo
+Type: Tenant
+URL: https://foo.userclouds.com
+Client ID: foo-client
+Client Secret: ****cret
+Console Tenant: console-prod
+  Console URL: https://console.userclouds.com
+  Console Client ID: console-client
+```
+
+**Example output for a console tenant context:**
+```
+Current context: console-prod
+Type: Console Tenant
+URL: https://console.userclouds.com
+Client ID: console-client
 Client Secret: ****cret
 ```
 
@@ -117,10 +156,16 @@ Commands for creating UserClouds resources.
 
 #### `ucctl create user`
 
-Create a new user with password or OIDC authentication.
+Create a new user with password authentication, OIDC authentication, or without authentication.
+
+**Important:** The user is created in the tenant specified by the current context:
+- **For console employee users**: Switch to a console tenant context first
+- **For regular tenant users**: Switch to a regular tenant context first
+
+When creating a user without authentication, the authentication will be automatically added when the user logs in for the first time via OIDC (based on email match).
 
 **Connection Flags (provide either via flags or use context):**
-- `--url` - IDP URL (or use current context)
+- `--url` - Tenant URL (or use current context)
 - `--client-id` - OAuth2 client ID (or use current context)
 - `--client-secret` - OAuth2 client secret (or use current context)
 - `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
@@ -129,7 +174,7 @@ Create a new user with password or OIDC authentication.
 **User Flags:**
 - `--email` - User email address
 - `--name` - User display name
-- `--organization-id` - Organization ID for the user
+- `--organization-id` - Organization ID for the user (required)
 
 **Password Authentication Flags:**
 - `--username` - Username for password authentication
@@ -141,20 +186,73 @@ Create a new user with password or OIDC authentication.
 - `--oidc-subject` - OIDC subject ID
 
 **Other Flags:**
+- `-a, --admin` - Grant admin privileges to the user
 - `-v, --verbose` - Enable verbose logging
 
 **Examples:**
 
-Create user with password authentication using current context:
+**Creating Console Employee Users:**
+
+Console employees are users who manage companies and other tenants. They are created in the console tenant.
+
 ```bash
+# Switch to console tenant context
+ucctl ctx use console-prod
+
+# Create console employee with password authentication
 ucctl create user \
   --username john.doe \
   --password SecurePass123! \
   --email john.doe@example.com \
-  --name "John Doe"
+  --name "John Doe" \
+  --organization-id <console-org-id>
+
+# Create console employee with admin privileges
+ucctl create user \
+  --username admin \
+  --password AdminPass123! \
+  --email admin@example.com \
+  --name "Admin User" \
+  --organization-id <console-org-id> \
+  --admin
 ```
 
-Create user with password authentication using explicit flags:
+**Creating Regular Tenant Users:**
+
+Regular tenant users belong to specific tenants and have access to that tenant's resources.
+
+```bash
+# Switch to tenant context
+ucctl ctx use tenant-foo
+
+# Create tenant user with password authentication
+ucctl create user \
+  --username customer1 \
+  --password CustomerPass123! \
+  --email customer@example.com \
+  --name "Customer User" \
+  --organization-id <tenant-org-id>
+
+# Create tenant user with OIDC authentication
+ucctl create user \
+  --oidc-provider google \
+  --oidc-issuer-url https://accounts.google.com \
+  --oidc-subject 1234567890 \
+  --email user@example.com \
+  --name "Google User" \
+  --organization-id <tenant-org-id>
+
+# Create tenant user without authentication (will authenticate via OIDC on first login)
+ucctl create user \
+  --email newuser@example.com \
+  --name "New User" \
+  --organization-id <tenant-org-id>
+```
+
+**Using Explicit Connection Flags:**
+
+If you don't want to use contexts, you can specify connection details explicitly:
+
 ```bash
 ucctl create user \
   --url http://localhost:8080 \
@@ -163,33 +261,81 @@ ucctl create user \
   --username jane.smith \
   --password SecurePass456! \
   --email jane.smith@example.com \
-  --name "Jane Smith"
-```
-
-Create user with OIDC authentication:
-```bash
-ucctl create user \
-  --oidc-provider google \
-  --oidc-issuer-url https://accounts.google.com \
-  --oidc-subject 1234567890 \
-  --email user@example.com \
-  --name "OIDC User"
-```
-
-Create user with organization:
-```bash
-ucctl create user \
-  --username admin \
-  --password AdminPass123! \
-  --email admin@example.com \
-  --organization-id 550e8400-e29b-41d4-a716-446655440000
+  --name "Jane Smith" \
+  --organization-id <org-id>
 ```
 
 **Notes:**
-- You must provide either username/password OR OIDC authentication details, not both
+- You must provide either username/password OR OIDC authentication details, OR omit both to create without authentication
 - If no connection flags are provided, the command will use the current context
 - Connection flags override context settings when specified
 - Client secret can be provided via flag, environment variable, or context
+- The `--admin` flag will grant admin privileges on the tenant/company after user creation
+
+---
+
+### Set Commands
+
+Commands for setting properties on UserClouds resources.
+
+#### `ucctl set admin`
+
+Set admin privileges for a user on a tenant or company.
+
+**Connection Flags (provide either via flags or use context):**
+- `--url` - IDP URL (or use current context)
+- `--console-tenant-url` - Console tenant URL (required for company operations)
+- `--client-id` - OAuth2 client ID (or use current context)
+- `--client-secret` - OAuth2 client secret (or use current context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+- `--use-context` - Explicitly use the current context from config
+
+**User Identification (must specify one):**
+- `-e, --email` - User email address
+- `-u, --user-id` - User ID (UUID)
+
+**Target (must specify one):**
+- `-t, --tenant-id` - Tenant ID (UUID) to grant admin privileges on
+- `-c, --company-id` - Company ID (UUID) to grant admin privileges on
+
+**Other Flags:**
+- `-v, --verbose` - Enable verbose output
+
+**Examples:**
+
+Grant admin privileges on a tenant using context and email:
+```bash
+ucctl set admin \
+  --use-context \
+  --email user@example.com \
+  --tenant-id 550e8400-e29b-41d4-a716-446655440000
+```
+
+Grant admin privileges on a company using explicit credentials:
+```bash
+ucctl set admin \
+  --url https://api.userclouds.com \
+  --console-tenant-url https://console.userclouds.com \
+  --client-id my-client \
+  --email user@example.com \
+  --company-id 550e8400-e29b-41d4-a716-446655440001
+```
+
+Grant admin using user ID instead of email:
+```bash
+ucctl set admin \
+  --use-context \
+  --user-id 660e8400-e29b-41d4-a716-446655440002 \
+  --tenant-id 550e8400-e29b-41d4-a716-446655440000 \
+  --verbose
+```
+
+**Notes:**
+- **For tenant operations**: Uses the `--url` to connect to the tenant's authz system
+- **For company operations**: Uses the `--console-tenant-url` to connect to the console tenant (companies are managed through the console tenant)
+- When using `--email`, the command searches for the user by email address (tries OIDC first, then password auth)
+- If multiple users have the same email, you must use `--user-id` instead
+- The command adds the user to the target tenant/company group with the `admin` role
 
 ---
 
@@ -299,17 +445,31 @@ Context configurations are stored in:
 ### Config File Format
 
 ```yaml
-current_context: local
+current_context: console-prod
 contexts:
-  local:
-    url: http://localhost:8080
-    client_id: test-client
-    client_secret: test-secret
-  prod:
-    url: https://prod.userclouds.com
-    client_id: prod-client
-    client_secret: prod-secret
+  console-prod:
+    url: https://console.userclouds.com
+    client_id: console-client
+    client_secret: console-secret
+    console_tenant: true
+  tenant-foo:
+    url: https://foo.userclouds.com
+    client_id: foo-client
+    client_secret: foo-secret
+    console: console-prod
+  tenant-bar:
+    url: https://bar.userclouds.com
+    client_id: bar-client
+    client_secret: bar-secret
+    console: console-prod
 ```
+
+**Field Descriptions:**
+- `url`: The base URL for the UserClouds installation
+- `client_id`: OAuth2 client ID for authentication
+- `client_secret`: OAuth2 client secret for authentication
+- `console`: Name of the console tenant context (for regular tenant contexts only)
+- `console_tenant`: Boolean flag indicating this is a console tenant (for console contexts only)
 
 **Security Note:** The config file contains client secrets in plain text. Ensure the file has appropriate permissions (mode 0600).
 
@@ -330,18 +490,21 @@ contexts:
 # Configure local development environment
 ucctl ctx set local \
   --url http://localhost:8080 \
+  --console-tenant-url http://localhost:8080 \
   --client-id local-client \
   --client-secret local-secret
 
 # Configure staging environment
 ucctl ctx set staging \
   --url https://staging.userclouds.com \
+  --console-tenant-url https://console-staging.userclouds.com \
   --client-id staging-client \
   --client-secret staging-secret
 
 # Configure production environment
 ucctl ctx set prod \
   --url https://prod.userclouds.com \
+  --console-tenant-url https://console.userclouds.com \
   --client-id prod-client \
   --client-secret prod-secret
 
@@ -352,16 +515,22 @@ ucctl ctx list
 ucctl ctx use staging
 ```
 
-### Creating Users Across Environments
+### Creating Console Employees Across Environments
 
 ```bash
-# Create user in local environment
+# Create console employee in local environment
 ucctl ctx use local
-ucctl create user --username testuser --password Test123! --email test@example.com
+ucctl create user \
+  --username testuser \
+  --password Test123! \
+  --email test@example.com \
+  --organization-id <console-org-id>
 
-# Create same user in staging
-ucctl ctx use staging
-ucctl create user --username testuser --password Test123! --email test@example.com
+# Grant admin privileges on a company
+ucctl set admin \
+  --use-context \
+  --email test@example.com \
+  --company-id <company-uuid>
 ```
 
 ### Syncing Configuration Between Environments
@@ -419,10 +588,10 @@ This occurs when no context is configured or active. Fix it by:
 
 ```bash
 # Set and use a context
-ucctl ctx set myenv --url <url> --client-id <id> --client-secret <secret>
+ucctl ctx set myenv --url <url> --console-tenant-url <console-url> --client-id <id> --client-secret <secret>
 
 # Or explicitly provide connection flags
-ucctl create user --url <url> --client-id <id> --client-secret <secret> ...
+ucctl create user --console-tenant-url <console-url> --client-id <id> --client-secret <secret> ...
 ```
 
 ### "Client secret is not set" error

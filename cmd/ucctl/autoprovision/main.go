@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/spf13/cobra"
 
 	"userclouds.com/infra/logtransports"
 	"userclouds.com/infra/namespace/universe"
@@ -26,19 +28,36 @@ const (
 	skipEnsureAWSSecretsAccessEnvVar = "SKIP_ENSURE_AWS_SECRETS_ACCESS"
 )
 
-func main() {
-	ctx := context.Background()
+type AutoProvisionCommand struct{}
+
+func (c *AutoProvisionCommand) RunE(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	startTime := time.Now().UTC()
-	logtransports.InitLoggerAndTransportsForTools(ctx, uclog.LogLevelVerbose, uclog.LogLevelNonMessage, "automatedprovisioner", logtransports.UseJSONLog())
+	logtransports.InitLoggerAndTransportsForTools(ctx, uclog.LogLevelVerbose, uclog.LogLevelNonMessage, "autoprovision", logtransports.UseJSONLog())
+
+	if err := run(ctx); err != nil {
+		uclog.Fatalf(ctx, "Autoprovision failed: %v", err)
+		return err
+	}
+
+	uclog.Infof(ctx, "Automated Provisioning complete. took %v", time.Now().UTC().Sub(startTime))
+
+	return nil
+}
+
+func run(ctx context.Context) error {
 	uv := universe.Current()
 	if !uv.IsOnPremOrContainer() {
 		uclog.Fatalf(ctx, "automated provisioner not supported for '%v'", uv)
 	}
+
 	if value, ok := os.LookupEnv(skipEnsureAWSSecretsAccessEnvVar); ok && value == "true" {
 		uclog.Infof(ctx, "Skipping AWS Secrets Manager access ensured")
 	} else if err := ensureAWSSecretsAccess(ctx); err != nil {
-		uclog.Fatalf(ctx, "Failed to ensure AWS Secrets Manager access: %v", err)
+		return fmt.Errorf("failed to ensure AWS Secrets Manager access: %v", err)
 	}
+
 	// load early so we bail out instead of failing later
 	baseProvisionFilesPath, ok := os.LookupEnv("UC_BASE_PROVISION_FILES_PATH")
 	if !ok {
@@ -46,20 +65,20 @@ func main() {
 	}
 	company, tf, err := loadProvisionData(ctx, baseProvisionFilesPath)
 	if err != nil {
-		uclog.Fatalf(ctx, "Failed to load provisioning files: '%v'", err)
+		return fmt.Errorf("failed to load provisioning files: '%v'", err)
 	}
 	tenantDBDownMigrate := -1
 	downMigrateRequest, ok := os.LookupEnv("TENANT_DB_DOWN_MIGRATE_DB_VERSION")
 	if ok {
 		if tenantDBDownMigrate, err = strconv.Atoi(downMigrateRequest); err != nil {
-			uclog.Fatalf(ctx, "Failed to parse TENANT_DB_DOWN_MIGRATE_DB_VERSION: '%s' %v", downMigrateRequest, err)
+			return fmt.Errorf("failed to parse TENANT_DB_DOWN_MIGRATE_DB_VERSION: '%s' %v", downMigrateRequest, err)
 		}
 		uclog.Infof(ctx, "Down migrating tenantdb to version %d", tenantDBDownMigrate)
 	}
 
 	serviceData, err := migrateDatabases(ctx, uv, tenantDBDownMigrate)
 	if err != nil {
-		uclog.Fatalf(ctx, "Failed to migrate databases: %v", err)
+		return fmt.Errorf("failed to migrate databases: %v", err)
 	}
 	provisionArgs := provisionArgs{
 		tenantFile:         tf,
@@ -70,12 +89,13 @@ func main() {
 	}
 	companyStorage := cmdline.GetCompanyStorage(ctx)
 	if err := provisionOrValidateConsole(ctx, provisionArgs, companyStorage); err != nil {
-		uclog.Fatalf(ctx, "Failed to provision console tenant: %v", err)
+		return fmt.Errorf("failed to provision console tenant: %v", err)
 	}
 	if err := provisionEvents(ctx, provisionArgs.companyConfigDBCfg, companyStorage); err != nil {
-		uclog.Fatalf(ctx, "Failed to provision or validate events: %v", err)
+		return fmt.Errorf("failed to provision or validate events: %v", err)
 	}
-	uclog.Infof(ctx, "Automated Provisioning complete. took %v", time.Now().UTC().Sub(startTime))
+
+	return nil
 }
 
 func provisionEvents(ctx context.Context, companyConfigDBCfg *ucdb.Config, companyStorage *companyconfig.Storage) error {

@@ -7,41 +7,45 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"userclouds.com/cmd/ucctl/config"
+	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/idp"
-	"userclouds.com/infra/jsonclient"
 	"userclouds.com/infra/pagination"
 	"userclouds.com/infra/ucerr"
 )
 
 type UsersCommand struct {
-	URL          string
-	ClientID     string
-	ClientSecret string
+	URL             string
+	ClientID        string
+	ClientSecret    string
+	ClientSecretVar string
+	AuthnType       string
+
+	// credentials holds the loaded credentials
+	credentials *common.Credentials
 }
 
 func (c *UsersCommand) RunE(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	cx, err := cfg.GetCurrentContext()
-	if err != nil {
-		return fmt.Errorf("no current context set. Use 'ucctl context use <name>' or provide --url, --client-id, and --client-secret")
-	}
-
-	c.URL = cx.URL
-	c.ClientID = cx.ClientID
-	c.ClientSecret = cx.ClientSecret
-
-	credOpt, err := c.getClientCredentials()
+	// Load credentials from context or flags
+	creds, err := common.LoadCredentialsFromContext(
+		
+		c.URL,
+		c.ClientID,
+		c.ClientSecret,
+		c.ClientSecretVar,
+	)
 	if err != nil {
 		return err
 	}
+	c.credentials = creds
+
+	// Create client credentials option
+	credOpt, err := c.credentials.GetClientCredentials()
+	if err != nil {
+		return fmt.Errorf("failed to create client credentials: %w", err)
+	}
 
 	// Create IDP management client
-	mgmtClient, err := idp.NewManagementClient(c.URL, credOpt)
+	mgmtClient, err := idp.NewManagementClient(c.credentials.URL, credOpt)
 	if err != nil {
 		return fmt.Errorf("failed to create IDP client: %w", err)
 	}
@@ -79,8 +83,4 @@ func (c *UsersCommand) fetchProfiles(ctx context.Context, mgc *idp.ManagementCli
 	}
 
 	return profiles, nil
-}
-
-func (c *UsersCommand) getClientCredentials() (jsonclient.Option, error) {
-	return jsonclient.ClientCredentialsForURL(c.URL, c.ClientID, c.ClientSecret, nil)
 }

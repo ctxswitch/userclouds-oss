@@ -3,7 +3,6 @@ package set
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/gofrs/uuid"
 	"github.com/pterm/pterm"
@@ -11,57 +10,25 @@ import (
 
 	"userclouds.com/authz"
 	"userclouds.com/authz/ucauthz"
-	"userclouds.com/cmd/ucctl/config"
+	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/idp"
-	"userclouds.com/infra/jsonclient"
 )
 
 // AdminCommand handles the set admin subcommand
 type AdminCommand struct {
-	URL                       string
-	ConsoleTenantURL          string
-	ClientID                  string
-	ClientSecret              string
-	ConsoleTenantClientID     string
-	ConsoleTenantClientSecret string
-	ClientSecretVar           string
-	UseContext                bool
-	UserEmail                 string
-	UserID                    string
-	TenantID                  string
-	CompanyID                 string
-	Verbose                   bool
-}
+	URL             string
+	ClientID        string
+	ClientSecret    string
+	ClientSecretVar string
+	AuthnType       string
+	UserEmail       string
+	UserID          string
+	TenantID        string
+	CompanyID       string
+	Verbose         bool
 
-const (
-	DefaultClientSecretVar = "UC_CLIENT_SECRET"
-)
-
-// NewAdminCommand creates the set admin command
-func NewAdminCommand() *cobra.Command {
-	ac := &AdminCommand{}
-	cmd := &cobra.Command{
-		Use:   "admin",
-		Short: "Set admin privileges for a user",
-		Long: `Set admin privileges for a user on a tenant or company.
-The user can be specified by email or ID.
-Either --tenant-id or --company-id must be specified.`,
-		RunE: ac.RunE,
-	}
-
-	cmd.Flags().BoolVarP(&ac.Verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().BoolVarP(&ac.UseContext, "use-context", "", false, "use current context from config")
-	cmd.Flags().StringVarP(&ac.URL, "url", "", "", "IDP URL (or use context)")
-	cmd.Flags().StringVarP(&ac.ConsoleTenantURL, "console-tenant-url", "", "", "Console tenant URL (or use context, required for company operations)")
-	cmd.Flags().StringVarP(&ac.ClientID, "client-id", "", "", "client ID (or use context)")
-	cmd.Flags().StringVarP(&ac.ClientSecret, "client-secret", "", "", "client secret (or use context)")
-	cmd.Flags().StringVarP(&ac.ClientSecretVar, "client-secret-var", "", DefaultClientSecretVar, "environment variable containing client secret")
-	cmd.Flags().StringVarP(&ac.UserEmail, "email", "e", "", "user email address")
-	cmd.Flags().StringVarP(&ac.UserID, "user-id", "u", "", "user ID")
-	cmd.Flags().StringVarP(&ac.TenantID, "tenant-id", "t", "", "tenant ID")
-	cmd.Flags().StringVarP(&ac.CompanyID, "company-id", "c", "", "company ID")
-
-	return cmd
+	// credentials holds the loaded credentials
+	credentials *common.Credentials
 }
 
 // RunE executes the set admin command
@@ -80,61 +47,18 @@ func (c *AdminCommand) RunE(cmd *cobra.Command, args []string) error {
 }
 
 func (c *AdminCommand) validate() error {
-	// If using context, load from config
-	if c.UseContext || (c.URL == "" && c.ClientID == "" && c.ClientSecret == "") {
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-
-		ctx, err := cfg.GetCurrentContext()
-		if err != nil {
-			return fmt.Errorf("no current context set. Use 'ucctl context use <name>' or provide --url, --client-id, and --client-secret")
-		}
-
-		// Only override if not explicitly set
-		if c.URL == "" {
-			c.URL = ctx.URL
-		}
-		if c.ClientID == "" {
-			c.ClientID = ctx.ClientID
-		}
-		if c.ClientSecret == "" {
-			c.ClientSecret = ctx.ClientSecret
-		}
-
-		// Resolve console tenant context for console credentials
-		consoleCtx, err := cfg.GetConsoleTenantContext(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to resolve console tenant: %w", err)
-		}
-
-		if c.ConsoleTenantURL == "" {
-			c.ConsoleTenantURL = consoleCtx.URL
-		}
-		if c.ConsoleTenantClientID == "" {
-			c.ConsoleTenantClientID = consoleCtx.ClientID
-		}
-		if c.ConsoleTenantClientSecret == "" {
-			c.ConsoleTenantClientSecret = consoleCtx.ClientSecret
-		}
+	// Load credentials from context or flags
+	creds, err := common.LoadCredentialsFromContext(
+		
+		c.URL,
+		c.ClientID,
+		c.ClientSecret,
+		c.ClientSecretVar,
+	)
+	if err != nil {
+		return err
 	}
-
-	if c.URL == "" {
-		return fmt.Errorf("URL is required (use --url or set a context)")
-	}
-
-	if c.ClientID == "" {
-		return fmt.Errorf("client ID is required (use --client-id or set a context)")
-	}
-
-	// Get client secret from environment variable if not set directly
-	if c.ClientSecret == "" {
-		c.ClientSecret = os.Getenv(c.ClientSecretVar)
-		if c.ClientSecret == "" {
-			return fmt.Errorf("client secret is required (use --client-secret, set %s env var, or use a context)", c.ClientSecretVar)
-		}
-	}
+	c.credentials = creds
 
 	// User must be specified by either email or ID
 	if c.UserEmail == "" && c.UserID == "" {
@@ -152,11 +76,6 @@ func (c *AdminCommand) validate() error {
 
 	if c.TenantID != "" && c.CompanyID != "" {
 		return fmt.Errorf("specify only one of --tenant-id or --company-id, not both")
-	}
-
-	// For company operations, console tenant URL is required
-	if c.CompanyID != "" && c.ConsoleTenantURL == "" {
-		return fmt.Errorf("--console-tenant-url is required when setting admin for a company (companies are managed through the console tenant)")
 	}
 
 	return nil
@@ -222,13 +141,13 @@ func (c *AdminCommand) setAdmin(ctx context.Context) error {
 
 func (c *AdminCommand) getUserIDByEmail(ctx context.Context) (uuid.UUID, error) {
 	// Get client credentials
-	credOpt, err := c.getClientCredentials()
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
 		return uuid.Nil, err
 	}
 
 	// Create IDP management client
-	mgmtClient, err := idp.NewManagementClient(c.URL, credOpt)
+	mgmtClient, err := idp.NewManagementClient(c.credentials.URL, credOpt)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to create IDP client: %w", err)
 	}
@@ -263,14 +182,6 @@ func (c *AdminCommand) getUserIDByEmail(ctx context.Context) (uuid.UUID, error) 
 	return userID, nil
 }
 
-func (c *AdminCommand) getClientCredentials() (jsonclient.Option, error) {
-	return jsonclient.ClientCredentialsForURL(c.URL, c.ClientID, c.ClientSecret, nil)
-}
-
-func (c *AdminCommand) getConsoleTenantClientCredentials() (jsonclient.Option, error) {
-	return jsonclient.ClientCredentialsForURL(c.ConsoleTenantURL, c.ConsoleTenantClientID, c.ConsoleTenantClientSecret, nil)
-}
-
 func (c *AdminCommand) setAdminForTenant(ctx context.Context, spinner *pterm.SpinnerPrinter, userID uuid.UUID) error {
 	spinner.UpdateText("Setting admin privileges for tenant...")
 
@@ -280,13 +191,13 @@ func (c *AdminCommand) setAdminForTenant(ctx context.Context, spinner *pterm.Spi
 	}
 
 	// Get client credentials
-	credOpt, err := c.getClientCredentials()
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
 		return fmt.Errorf("failed to create client credentials: %w", err)
 	}
 
 	// Create authz client
-	authzClient, err := authz.NewClient(c.URL, authz.JSONClient(credOpt), authz.TenantID(tenantID))
+	authzClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt), authz.TenantID(tenantID))
 	if err != nil {
 		return fmt.Errorf("failed to create authz client: %w", err)
 	}
@@ -322,18 +233,17 @@ func (c *AdminCommand) setAdminForCompany(ctx context.Context, spinner *pterm.Sp
 		return fmt.Errorf("invalid company ID: %w", err)
 	}
 
-	// Get console tenant client credentials
-	credOpt, err := c.getConsoleTenantClientCredentials()
+	// Get client credentials
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
-		return fmt.Errorf("failed to create console tenant client credentials: %w", err)
+		return fmt.Errorf("failed to create client credentials: %w", err)
 	}
 
 	// NOTE: Companies are managed through the console tenant's authz system.
-	// The ConsoleTenantURL should point to the console tenant, not the company itself.
-	// The console tenant manages company memberships and roles.
+	// The current context should be set to the console tenant context.
 
 	// Create authz client connected to console tenant
-	authzClient, err := authz.NewClient(c.ConsoleTenantURL, authz.JSONClient(credOpt))
+	authzClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt))
 	if err != nil {
 		return fmt.Errorf("failed to create authz client: %w", err)
 	}

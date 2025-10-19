@@ -3,10 +3,12 @@ package main
 import (
 	"github.com/spf13/cobra"
 	"userclouds.com/cmd/ucctl/autoprovision"
+	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/cmd/ucctl/get"
 
 	"userclouds.com/cmd/ucctl/context"
 	"userclouds.com/cmd/ucctl/create"
+	"userclouds.com/cmd/ucctl/delete"
 	"userclouds.com/cmd/ucctl/set"
 	"userclouds.com/cmd/ucctl/sync"
 )
@@ -43,6 +45,9 @@ added when the user logs in for the first time via OIDC (based on email match).`
 	GetUsage     = "get"
 	GetShort     = "Get userclouds resources"
 	GetLong      = `Get userclouds resources such as users, objects, edges, etc`
+	DeleteUsage  = "delete"
+	DeleteShort  = "Delete userclouds resources"
+	DeleteLong   = `Delete userclouds resources such as objects, edges, object types, and edge types`
 )
 
 type Root struct{}
@@ -70,6 +75,7 @@ func (r *Root) Command() *cobra.Command {
 	rootCmd.AddCommand(AutoProvisionCommand())
 	rootCmd.AddCommand(SyncCommand())
 	rootCmd.AddCommand(CreateCommand())
+	rootCmd.AddCommand(DeleteCommand())
 	rootCmd.AddCommand(SetCommand())
 	rootCmd.AddCommand(ContextCommand())
 	rootCmd.AddCommand(GetCommand())
@@ -130,6 +136,31 @@ func GetCommand() *cobra.Command {
 
 	cmd.AddCommand(GetUsersCommand())
 	cmd.AddCommand(GetUserCommand())
+	cmd.AddCommand(GetObjectTypesCommand())
+	cmd.AddCommand(GetObjectTypeCommand())
+	cmd.AddCommand(GetObjectsCommand())
+	cmd.AddCommand(GetObjectCommand())
+	cmd.AddCommand(GetEdgeTypesCommand())
+	cmd.AddCommand(GetEdgeTypeCommand())
+	cmd.AddCommand(GetEdgesCommand())
+	cmd.AddCommand(GetEdgeCommand())
+	return cmd
+}
+
+func DeleteCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   DeleteUsage,
+		Short: DeleteShort,
+		Long:  DeleteLong,
+		Run: func(cmd *cobra.Command, args []string) {
+			_ = cmd.Help()
+		},
+	}
+
+	cmd.AddCommand(DeleteObjectCommand())
+	cmd.AddCommand(DeleteObjectTypeCommand())
+	cmd.AddCommand(DeleteEdgeCommand())
+	cmd.AddCommand(DeleteEdgeTypeCommand())
 	return cmd
 }
 
@@ -143,7 +174,9 @@ func SetCommand() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(set.NewAdminCommand())
+	cmd.AddCommand(SetAdminCommand())
+	cmd.AddCommand(SetObjectCommand())
+	cmd.AddCommand(SetEdgeTypeCommand())
 	return cmd
 }
 
@@ -156,13 +189,10 @@ func CreateUserCommand() *cobra.Command {
 		RunE:  uc.RunE,
 	}
 
+	common.AddAuthFlags(cmd, &uc.URL, &uc.ClientID, &uc.ClientSecret, &uc.ClientSecretVar, &uc.AuthnType)
+
 	cmd.Flags().BoolVarP(&uc.Admin, "admin", "a", false, "Admin user")
 	cmd.Flags().BoolVarP(&uc.Verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().BoolVarP(&uc.UseContext, "use-context", "", false, "use current context from config")
-	cmd.Flags().StringVarP(&uc.URL, "url", "", "", "Tenant URL (or use context)")
-	cmd.Flags().StringVarP(&uc.ClientID, "client-id", "", "", "client ID (or use context)")
-	cmd.Flags().StringVarP(&uc.ClientSecret, "client-secret", "", "", "client secret (or use context)")
-	cmd.Flags().StringVarP(&uc.ClientSecretVar, "client-secret-var", "", create.DefaultClientSecretVar, "environment variable containing client secret")
 	cmd.Flags().StringVarP(&uc.OrganizationID, "organization-id", "", "", "organization ID for the user")
 	cmd.Flags().StringVarP(&uc.Email, "email", "", "", "user email address")
 	cmd.Flags().StringVarP(&uc.Name, "name", "", "", "user name")
@@ -257,12 +287,16 @@ func ContextShowCommand() *cobra.Command {
 
 func GetUsersCommand() *cobra.Command {
 	gu := get.UsersCommand{}
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "users",
 		Short: "List all users",
 		Long:  "List all users",
 		RunE:  gu.RunE,
 	}
+
+	common.AddAuthFlags(cmd, &gu.URL, &gu.ClientID, &gu.ClientSecret, &gu.ClientSecretVar, &gu.AuthnType)
+
+	return cmd
 }
 
 func GetUserCommand() *cobra.Command {
@@ -274,11 +308,237 @@ func GetUserCommand() *cobra.Command {
 		RunE:  gu.RunE,
 	}
 
-	cmd.Flags().BoolVarP(&gu.UseContext, "use-context", "", false, "use current context from config")
-	cmd.Flags().StringVarP(&gu.URL, "url", "", "", "Tenant URL (or use context)")
-	cmd.Flags().StringVarP(&gu.ClientID, "client-id", "", "", "client ID (or use context)")
-	cmd.Flags().StringVarP(&gu.ClientSecret, "client-secret", "", "", "client secret (or use context)")
-	cmd.Flags().StringVarP(&gu.AuthnType, "authn-type", "", "", "Authn type (social, password)")
+	common.AddAuthFlags(cmd, &gu.URL, &gu.ClientID, &gu.ClientSecret, &gu.ClientSecretVar, &gu.AuthnType)
+
+	return cmd
+}
+
+func GetObjectTypesCommand() *cobra.Command {
+	got := get.ObjectTypesCommand{}
+	cmd := &cobra.Command{
+		Use:   "objecttypes",
+		Short: "List all object types",
+		Long:  "List all AuthZ object types with pagination support",
+		RunE:  got.RunE,
+	}
+
+	common.AddListCommandFlags(cmd, &got.URL, &got.ClientID, &got.ClientSecret, &got.ClientSecretVar, &got.Limit, &got.Cursor, &got.NoPager, &got.Filter, &got.RawFilter, &got.Output, &got.AuthnType)
+
+	return cmd
+}
+
+func GetObjectTypeCommand() *cobra.Command {
+	got := get.ObjectTypeCommand{}
+	cmd := &cobra.Command{
+		Use:   "objecttype <id>",
+		Short: "Get object type by ID",
+		Long:  "Get detailed information about an AuthZ object type by its ID",
+		RunE:  got.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &got.URL, &got.ClientID, &got.ClientSecret, &got.ClientSecretVar, &got.AuthnType)
+
+	return cmd
+}
+
+func GetObjectsCommand() *cobra.Command {
+	gobj := get.ObjectsCommand{}
+	cmd := &cobra.Command{
+		Use:   "objects",
+		Short: "List all objects",
+		Long:  "List all AuthZ objects with pagination and filtering support",
+		RunE:  gobj.RunE,
+	}
+
+	common.AddListCommandFlags(cmd, &gobj.URL, &gobj.ClientID, &gobj.ClientSecret, &gobj.ClientSecretVar, &gobj.Limit, &gobj.Cursor, &gobj.NoPager, &gobj.Filter, &gobj.RawFilter, &gobj.Output, &gobj.AuthnType)
+
+	return cmd
+}
+
+func GetObjectCommand() *cobra.Command {
+	gobj := get.ObjectCommand{}
+	cmd := &cobra.Command{
+		Use:   "object <id>",
+		Short: "Get object by ID",
+		Long:  "Get detailed information about an AuthZ object by its ID",
+		RunE:  gobj.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &gobj.URL, &gobj.ClientID, &gobj.ClientSecret, &gobj.ClientSecretVar, &gobj.AuthnType)
+
+	return cmd
+}
+
+func GetEdgeTypesCommand() *cobra.Command {
+	ge := get.EdgeTypesCommand{}
+	cmd := &cobra.Command{
+		Use:   "edgetypes",
+		Short: "List all edge types",
+		Long:  "List all AuthZ edge types with pagination and filtering support",
+		RunE:  ge.RunE,
+	}
+
+	common.AddListCommandFlags(cmd, &ge.URL, &ge.ClientID, &ge.ClientSecret, &ge.ClientSecretVar, &ge.Limit, &ge.Cursor, &ge.NoPager, &ge.Filter, &ge.RawFilter, &ge.Output, &ge.AuthnType)
+
+	return cmd
+}
+
+func GetEdgeTypeCommand() *cobra.Command {
+	ge := get.EdgeTypeCommand{}
+	cmd := &cobra.Command{
+		Use:   "edgetype <id>",
+		Short: "Get edge type by ID",
+		Long:  "Get detailed information about an AuthZ edge type by its ID",
+		RunE:  ge.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &ge.URL, &ge.ClientID, &ge.ClientSecret, &ge.ClientSecretVar, &ge.AuthnType)
+
+	return cmd
+}
+
+func GetEdgesCommand() *cobra.Command {
+	ge := get.EdgesCommand{}
+	cmd := &cobra.Command{
+		Use:   "edges",
+		Short: "List all edges",
+		Long:  "List all AuthZ edges with pagination and filtering support",
+		RunE:  ge.RunE,
+	}
+
+	common.AddListCommandFlags(cmd, &ge.URL, &ge.ClientID, &ge.ClientSecret, &ge.ClientSecretVar, &ge.Limit, &ge.Cursor, &ge.NoPager, &ge.Filter, &ge.RawFilter, &ge.Output, &ge.AuthnType)
+
+	return cmd
+}
+
+func GetEdgeCommand() *cobra.Command {
+	ge := get.EdgeCommand{}
+	cmd := &cobra.Command{
+		Use:   "edge <id>",
+		Short: "Get edge by ID",
+		Long:  "Get detailed information about an AuthZ edge by its ID",
+		RunE:  ge.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &ge.URL, &ge.ClientID, &ge.ClientSecret, &ge.ClientSecretVar, &ge.AuthnType)
+
+	return cmd
+}
+
+func DeleteObjectCommand() *cobra.Command {
+	dc := delete.ObjectCommand{}
+	cmd := &cobra.Command{
+		Use:   "object <id>",
+		Short: "Delete an object by ID",
+		Long:  "Delete an AuthZ object by its ID",
+		RunE:  dc.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+
+	return cmd
+}
+
+func DeleteObjectTypeCommand() *cobra.Command {
+	dc := delete.ObjectTypeCommand{}
+	cmd := &cobra.Command{
+		Use:   "objecttype <id>",
+		Short: "Delete an object type by ID",
+		Long:  "Delete an AuthZ object type by its ID",
+		RunE:  dc.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+
+	return cmd
+}
+
+func DeleteEdgeCommand() *cobra.Command {
+	dc := delete.EdgeCommand{}
+	cmd := &cobra.Command{
+		Use:   "edge <id>",
+		Short: "Delete an edge by ID",
+		Long:  "Delete an AuthZ edge by its ID",
+		RunE:  dc.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+
+	return cmd
+}
+
+func DeleteEdgeTypeCommand() *cobra.Command {
+	dc := delete.EdgeTypeCommand{}
+	cmd := &cobra.Command{
+		Use:   "edgetype <id>",
+		Short: "Delete an edge type by ID",
+		Long:  "Delete an AuthZ edge type by its ID",
+		RunE:  dc.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+
+	return cmd
+}
+
+func SetObjectCommand() *cobra.Command {
+	sc := set.ObjectCommand{}
+	cmd := &cobra.Command{
+		Use:   "object <id>",
+		Short: "Update an object's alias",
+		Long:  "Update an AuthZ object's alias field by its ID",
+		RunE:  sc.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &sc.URL, &sc.ClientID, &sc.ClientSecret, &sc.ClientSecretVar, &sc.AuthnType)
+
+	cmd.Flags().StringVarP(&sc.Alias, "alias", "a", "", "new alias for the object")
+	cmd.Flags().BoolVarP(&sc.ClearAlias, "clear-alias", "", false, "clear the alias (set to null)")
+
+	return cmd
+}
+
+func SetEdgeTypeCommand() *cobra.Command {
+	sc := set.EdgeTypeCommand{}
+	cmd := &cobra.Command{
+		Use:   "edgetype <id>",
+		Short: "Update an edge type",
+		Long:  "Update an AuthZ edge type's properties by its ID",
+		RunE:  sc.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &sc.URL, &sc.ClientID, &sc.ClientSecret, &sc.ClientSecretVar, &sc.AuthnType)
+
+	cmd.Flags().StringVarP(&sc.TypeName, "type-name", "n", "", "edge type name (required)")
+	cmd.Flags().StringVarP(&sc.SourceObjectTypeID, "source-object-type-id", "s", "", "source object type ID (required)")
+	cmd.Flags().StringVarP(&sc.TargetObjectTypeID, "target-object-type-id", "t", "", "target object type ID (required)")
+	cmd.Flags().StringVarP(&sc.Attributes, "attributes", "", "", "attributes as JSON string")
+
+	return cmd
+}
+
+func SetAdminCommand() *cobra.Command {
+	ac := set.AdminCommand{}
+	cmd := &cobra.Command{
+		Use:   "admin",
+		Short: "Set admin privileges for a user",
+		Long: `Set admin privileges for a user on a tenant or company.
+
+The user can be specified by email or ID.
+Either --tenant-id or --company-id must be specified.
+
+For tenant operations: Switch to the tenant context first
+For company operations: Switch to the console tenant context first`,
+		RunE: ac.RunE,
+	}
+
+	common.AddAuthFlags(cmd, &ac.URL, &ac.ClientID, &ac.ClientSecret, &ac.ClientSecretVar, &ac.AuthnType)
+
+	cmd.Flags().BoolVarP(&ac.Verbose, "verbose", "v", false, "verbose output")
+	cmd.Flags().StringVarP(&ac.UserEmail, "email", "e", "", "user email address")
+	cmd.Flags().StringVarP(&ac.UserID, "user-id", "u", "", "user ID")
+	cmd.Flags().StringVarP(&ac.TenantID, "tenant-id", "t", "", "tenant ID")
+	cmd.Flags().StringVarP(&ac.CompanyID, "company-id", "c", "", "company ID")
 
 	return cmd
 }

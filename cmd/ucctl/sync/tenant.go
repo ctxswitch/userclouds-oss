@@ -3,7 +3,6 @@ package sync
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"time"
 
@@ -12,14 +11,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"userclouds.com/authz"
-	"userclouds.com/cmd/ucctl/config"
-	"userclouds.com/infra/jsonclient"
+	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/infra/pagination"
 	"userclouds.com/infra/ucerr"
-)
-
-const (
-	DefaultClientSecretVar = "UC_CLIENT_SECRET"
 )
 
 // TenantCommand handles syncing tenant resources between environments
@@ -35,6 +29,10 @@ type TenantCommand struct {
 	DryRun                     bool
 	Verbose                    bool
 	InsertOnly                 bool
+
+	// Loaded credentials
+	sourceCredentials      *common.Credentials
+	destinationCredentials *common.Credentials
 }
 
 // NewTenantCommand creates a new tenant sync command
@@ -54,11 +52,11 @@ It supports dry-run mode to preview changes and insert-only mode to avoid deleti
 	cmd.Flags().StringVarP(&tc.Source, "source", "", "", "source context name (alternative to --source-url/--source-client-id)")
 	cmd.Flags().StringVarP(&tc.SourceURL, "source-url", "", "", "source tenant URL")
 	cmd.Flags().StringVarP(&tc.SourceClientId, "source-client-id", "", "", "source client ID")
-	cmd.Flags().StringVarP(&tc.SourceClientSecretVar, "source-client-secret-var", "", DefaultClientSecretVar, "environment variable containing source client secret")
+	cmd.Flags().StringVarP(&tc.SourceClientSecretVar, "source-client-secret-var", "", common.DefaultClientSecretVar, "environment variable containing source client secret")
 	cmd.Flags().StringVarP(&tc.Destination, "destination", "", "", "destination context name (alternative to --destination-url/--destination-client-id)")
 	cmd.Flags().StringVarP(&tc.DestinationURL, "destination-url", "", "", "destination tenant URL")
 	cmd.Flags().StringVarP(&tc.DestinationClientId, "destination-client-id", "", "", "destination client ID")
-	cmd.Flags().StringVarP(&tc.DestinationClientSecretVar, "destination-client-secret-var", "", DefaultClientSecretVar, "environment variable containing destination client secret")
+	cmd.Flags().StringVarP(&tc.DestinationClientSecretVar, "destination-client-secret-var", "", common.DefaultClientSecretVar, "environment variable containing destination client secret")
 	cmd.Flags().BoolVarP(&tc.DryRun, "dry-run", "", false, "preview changes without applying them")
 	cmd.Flags().BoolVarP(&tc.InsertOnly, "insert-only", "", false, "only insert new resources, don't delete existing ones")
 
@@ -80,81 +78,56 @@ func (c *TenantCommand) RunE(cmd *cobra.Command, args []string) error {
 }
 
 func (c *TenantCommand) validate() error {
-	// Load config if either source or destination context is specified
-	var cfg *config.Config
-	if c.Source != "" || c.Destination != "" {
-		var err error
-		cfg, err = config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-	}
+	var err error
 
-	// Handle source configuration
+	// Load source credentials
 	if c.Source != "" {
-		ctx, err := cfg.GetContext(c.Source)
+		// Load from named context
+		srcCreds, err := common.LoadCredentialsFromContextName(c.Source)
 		if err != nil {
-			return fmt.Errorf("failed to get source context: %w", err)
+			return fmt.Errorf("failed to load source context: %w", err)
 		}
-		// Only override if not explicitly set
+		// Set environment variable for the sync operation
 		if c.SourceURL == "" {
-			c.SourceURL = ctx.URL
+			c.SourceURL = srcCreds.URL
 		}
 		if c.SourceClientId == "" {
-			c.SourceClientId = ctx.ClientID
+			c.SourceClientId = srcCreds.ClientID
 		}
-		// Set client secret from context in environment variable if not already set
 		if os.Getenv(c.SourceClientSecretVar) == "" {
-			if ctx.ClientSecret != "" {
-				os.Setenv(c.SourceClientSecretVar, ctx.ClientSecret)
-			}
+			os.Setenv(c.SourceClientSecretVar, srcCreds.ClientSecret)
 		}
 	}
 
-	// Handle destination configuration
+	// Load source credentials from env
+	c.sourceCredentials, err = common.LoadCredentialsFromEnv(c.SourceURL, c.SourceClientId, c.SourceClientSecretVar)
+	if err != nil {
+		return fmt.Errorf("source credentials invalid: %w", err)
+	}
+
+	// Load destination credentials
 	if c.Destination != "" {
-		ctx, err := cfg.GetContext(c.Destination)
+		// Load from named context
+		dstCreds, err := common.LoadCredentialsFromContextName(c.Destination)
 		if err != nil {
-			return fmt.Errorf("failed to get destination context: %w", err)
+			return fmt.Errorf("failed to load destination context: %w", err)
 		}
-		// Only override if not explicitly set
+		// Set environment variable for the sync operation
 		if c.DestinationURL == "" {
-			c.DestinationURL = ctx.URL
+			c.DestinationURL = dstCreds.URL
 		}
 		if c.DestinationClientId == "" {
-			c.DestinationClientId = ctx.ClientID
+			c.DestinationClientId = dstCreds.ClientID
 		}
-		// Set client secret from context in environment variable if not already set
 		if os.Getenv(c.DestinationClientSecretVar) == "" {
-			if ctx.ClientSecret != "" {
-				os.Setenv(c.DestinationClientSecretVar, ctx.ClientSecret)
-			}
+			os.Setenv(c.DestinationClientSecretVar, dstCreds.ClientSecret)
 		}
 	}
 
-	// Validate that all required fields are now set
-	if c.SourceURL == "" {
-		return fmt.Errorf("source URL is required (use --source or --source-url)")
-	}
-
-	if c.SourceClientId == "" {
-		return fmt.Errorf("source client ID is required (use --source or --source-client-id)")
-	}
-
-	if os.Getenv(c.SourceClientSecretVar) == "" {
-		return fmt.Errorf("source client secret is not set in environment variable %s", c.SourceClientSecretVar)
-	}
-
-	if c.DestinationURL == "" {
-		return fmt.Errorf("destination URL is required (use --destination or --destination-url)")
-	}
-
-	if c.DestinationClientId == "" {
-		return fmt.Errorf("destination client ID is required (use --destination or --destination-client-id)")
-	}
-
-	if os.Getenv(c.DestinationClientSecretVar) == "" {
-		return fmt.Errorf("destination client secret is not set in environment variable %s", c.DestinationClientSecretVar)
+	// Load destination credentials from env
+	c.destinationCredentials, err = common.LoadCredentialsFromEnv(c.DestinationURL, c.DestinationClientId, c.DestinationClientSecretVar)
+	if err != nil {
+		return fmt.Errorf("destination credentials invalid: %w", err)
 	}
 
 	return nil
@@ -167,9 +140,13 @@ func (c *TenantCommand) sync(ctx context.Context) error {
 	pterm.Println()
 
 	// Fetch source resources
-	spinner, _ := pterm.DefaultSpinner.Start("Fetching resources from source: " + c.SourceURL)
-	srcTenant := newTenant(c.SourceURL, c.SourceClientId, c.SourceClientSecretVar)
-	srcClient, err := srcTenant.getClient()
+	spinner, _ := pterm.DefaultSpinner.Start("Fetching resources from source: " + c.sourceCredentials.URL)
+	srcCredOpt, err := c.sourceCredentials.GetClientCredentials()
+	if err != nil {
+		spinner.Fail("Failed to create source client credentials")
+		return fmt.Errorf("failed to create source client credentials: %w", err)
+	}
+	srcClient, err := authz.NewClient(c.sourceCredentials.URL, authz.JSONClient(srcCredOpt))
 	if err != nil {
 		spinner.Fail("Failed to create source client")
 		return fmt.Errorf("failed to create source client: %w", err)
@@ -183,9 +160,13 @@ func (c *TenantCommand) sync(ctx context.Context) error {
 		len(srcResources.objectTypes), len(srcResources.objects), len(srcResources.edgeTypes), len(srcResources.edges)))
 
 	// Fetch destination resources
-	spinner, _ = pterm.DefaultSpinner.Start("Fetching resources from destination: " + c.DestinationURL)
-	dstTenant := newTenant(c.DestinationURL, c.DestinationClientId, c.DestinationClientSecretVar)
-	dstClient, err := dstTenant.getClient()
+	spinner, _ = pterm.DefaultSpinner.Start("Fetching resources from destination: " + c.destinationCredentials.URL)
+	dstCredOpt, err := c.destinationCredentials.GetClientCredentials()
+	if err != nil {
+		spinner.Fail("Failed to create destination client credentials")
+		return fmt.Errorf("failed to create destination client credentials: %w", err)
+	}
+	dstClient, err := authz.NewClient(c.destinationCredentials.URL, authz.JSONClient(dstCredOpt))
 	if err != nil {
 		spinner.Fail("Failed to create destination client")
 		return fmt.Errorf("failed to create destination client: %w", err)
@@ -245,48 +226,6 @@ func (c *TenantCommand) sync(ctx context.Context) error {
 	duration := time.Since(startTime)
 	pterm.Println()
 	pterm.Success.Printfln("Sync completed in %s", duration)
-	return nil
-}
-
-// tenant represents a UserClouds tenant with authentication
-type tenant struct {
-	tenantURL       string
-	clientID        string
-	clientSecretVar string
-	tokenSource     jsonclient.Option
-}
-
-func newTenant(tenantURL, clientID, clientSecretVar string) *tenant {
-	return &tenant{
-		tenantURL:       tenantURL,
-		clientID:        clientID,
-		clientSecretVar: clientSecretVar,
-	}
-}
-
-func (t *tenant) getClient() (*authz.Client, error) {
-	if err := t.initToken(); err != nil {
-		return nil, err
-	}
-	return authz.NewClient(t.tenantURL, authz.JSONClient(t.tokenSource))
-}
-
-func (t *tenant) initToken() error {
-	if _, err := url.Parse(t.tenantURL); err != nil {
-		return fmt.Errorf("invalid tenant URL %s: %w", t.tenantURL, err)
-	}
-
-	secret := os.Getenv(t.clientSecretVar)
-	if secret == "" {
-		return fmt.Errorf("client secret not found in environment variable %s", t.clientSecretVar)
-	}
-
-	ts, err := jsonclient.ClientCredentialsForURL(t.tenantURL, t.clientID, secret, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create token source: %w", err)
-	}
-
-	t.tokenSource = ts
 	return nil
 }
 

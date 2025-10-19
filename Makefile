@@ -235,7 +235,7 @@ $(SERVICE_BINARIES): $(_GO_SRCS)
 
 ######################### tool binaries ##########################
 $(TOOL_BINARIES): $(_GO_SRCS)
-	go build --trimpath -o $@ -ldflags "-s -w" ./cmd/$(notdir $@)
+	CGO_CXXFLAGS="-w" go build --trimpath -o $@ -ldflags "-s -w" ./cmd/$(notdir $@)
 
 ######################### code gen binaries #########################
 $(CODEGEN_BINARIES): $(_GO_SRCS)

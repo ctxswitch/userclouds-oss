@@ -164,12 +164,11 @@ Create a new user with password authentication, OIDC authentication, or without 
 
 When creating a user without authentication, the authentication will be automatically added when the user logs in for the first time via OIDC (based on email match).
 
-**Connection Flags (provide either via flags or use context):**
-- `--url` - Tenant URL (or use current context)
-- `--client-id` - OAuth2 client ID (or use current context)
-- `--client-secret` - OAuth2 client secret (or use current context)
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
 - `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
-- `--use-context` - Explicitly use the current context from config
 
 **User Flags:**
 - `--email` - User email address
@@ -274,21 +273,590 @@ ucctl create user \
 
 ---
 
+### Filter Query Language
+
+The `get` commands support two types of filtering: simplified boolean expressions (via `--filter`) and raw filter queries (via `--raw-filter`).
+
+#### Simplified Filter Syntax (`--filter`)
+
+The `--filter` flag provides a user-friendly syntax for common filtering needs:
+
+**Operators:**
+- `&` - AND operator (e.g., `type_name=user&id=123`)
+- `|` - OR operator (e.g., `type_name=user|type_name=admin`)
+- `()` - Grouping (e.g., `(type_name=user|type_name=admin)&organization_id=456`)
+
+**Wildcards:**
+- `%` - Matches any number of characters (SQL LIKE)
+- Works with any string field (e.g., `type_name=user%` matches "user", "user_admin", etc.)
+
+**Examples:**
+```bash
+# Simple filter
+--filter "type_name=user"
+
+# AND operation
+--filter "type_name=user&organization_id=123"
+
+# OR operation
+--filter "type_name=user|type_name=admin"
+
+# Grouping with wildcards
+--filter "(type_name=user%|type_name=admin)&organization_id=456"
+```
+
+### Get Commands
+
+Commands for retrieving UserClouds resources.
+
+#### `ucctl get objecttypes`
+
+List all AuthZ object types with pagination and filtering support.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Pagination Flags:**
+- `-l, --limit` - Maximum number of results to return per page (0 = terminal height, default for interactive mode)
+- `-c, --cursor` - Pagination cursor for fetching the next page
+- `--no-pager` - Disable interactive paging and show all results at once
+
+**Filter Flags:**
+- `-f, --filter` - Filter results using boolean expressions (see [Filter Query Language](#filter-query-language))
+  - Supported keys: `id`, `type_name`, `created`, `updated`
+  - Example: `--filter "type_name=user%&organization_id=550e8400"`
+- `--raw-filter` - Raw filter query (see [Filter Query Language](#filter-query-language) for format)
+  - Example: `--raw-filter "('type_name',LK,'user%')"`
+  - Mutually exclusive with `--filter`
+
+**Examples:**
+
+List all object types with interactive paging:
+```bash
+ucctl ctx use tenant-foo
+ucctl get objecttypes```
+
+List all object types without paging (print all at once):
+```bash
+ucctl get objecttypes --no-pager
+```
+
+Filter by exact type name:
+```bash
+ucctl get objecttypes --filter "type_name=user"
+```
+
+Filter using wildcards (prefix match):
+```bash
+ucctl get objecttypes --filter "type_name=user%"
+```
+
+Filter with AND operator:
+```bash
+ucctl get objecttypes --filter "type_name=user&organization_id=550e8400-e29b-41d4-a716-446655440000"
+```
+
+Filter with OR operator:
+```bash
+ucctl get objecttypes --filter "type_name=user|type_name=admin"
+```
+
+Filter with grouping:
+```bash
+ucctl get objecttypes --filter "(type_name=user|type_name=admin)&organization_id=550e8400-e29b-41d4-a716-446655440000"
+```
+
+Using raw filter format:
+```bash
+ucctl get objecttypes --raw-filter "('type_name',LK,'user%')"
+```
+
+Using raw filter with composite query:
+```bash
+ucctl get objecttypes --raw-filter "(('type_name',LK,'user%'),OR,('type_name',EQ,'admin'))"
+```
+
+Using explicit connection flags:
+```bash
+ucctl get objecttypes \
+  --url https://foo.userclouds.com \
+  --client-id my-client \
+  --client-secret my-secret \
+  --filter "type_name=document"
+```
+
+Manual pagination with cursor:
+```bash
+# Get first page with limit
+ucctl get objecttypes --limit 10 --no-pager
+
+# Get next page using cursor from previous response
+ucctl get objecttypes --cursor "id:550e8400-..." --limit 10 --no-pager
+```
+
+**Notes:**
+- By default, uses interactive paging when output is to a terminal
+- Interactive mode displays results page by page based on terminal height
+- Use `--no-pager` to disable interactive mode and print all results
+- See [Filter Query Language](#filter-query-language) for comprehensive filtering documentation
+- Timestamp format for display: `2006-01-02 15:04:05`
+
+#### `ucctl get objecttype <id>`
+
+Get detailed information about a specific AuthZ object type by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl ctx use tenant-foo
+ucctl get objecttype 550e8400-e29b-41d4-a716-446655440000```
+
+#### `ucctl get objects`
+
+List all AuthZ objects with pagination and filtering support.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Pagination Flags:**
+- `-l, --limit` - Maximum number of results to return per page (0 = terminal height, default for interactive mode)
+- `-c, --cursor` - Pagination cursor for fetching the next page
+- `--no-pager` - Disable interactive paging and show all results at once
+
+**Filter Flags:**
+- `-f, --filter` - Filter results using boolean expressions (see [Filter Query Language](#filter-query-language))
+  - Supported keys: `id`, `alias`, `organization_id`, `type_id`, `created`, `updated`
+  - Example: `--filter "alias=user1&type_id=550e8400"`
+- `--raw-filter` - Raw filter query (see [Filter Query Language](#filter-query-language) for format)
+  - Mutually exclusive with `--filter`
+
+**Examples:**
+
+```bash
+# List all objects with interactive paging
+ucctl get objects
+# Filter by exact alias
+ucctl get objects --filter "alias=admin"
+
+# Filter by alias prefix using wildcard
+ucctl get objects --filter "alias=admin%"
+
+# Filter with AND: type and organization
+ucctl get objects --filter "type_id=550e8400-e29b-41d4-a716-446655440000&organization_id=660e8400-e29b-41d4-a716-446655440001"
+
+# Filter with OR: multiple aliases
+ucctl get objects --filter "alias=admin|alias=superuser"
+```
+
+#### `ucctl get object <id>`
+
+Get detailed information about a specific AuthZ object by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl get object 550e8400-e29b-41d4-a716-446655440000```
+
+#### `ucctl get edgetypes`
+
+List all AuthZ edge types with pagination and filtering support.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Pagination Flags:**
+- `-l, --limit` - Maximum number of results to return per page (0 = terminal height, default for interactive mode)
+- `-c, --cursor` - Pagination cursor for fetching the next page
+- `--no-pager` - Disable interactive paging and show all results at once
+
+**Filter Flags:**
+- `-f, --filter` - Filter results using boolean expressions (see [Filter Query Language](#filter-query-language))
+  - Supported keys: `id`, `type_name`, `organization_id`, `source_object_type_id`, `target_object_type_id`, `created`, `updated`
+  - Example: `--filter "type_name=member&organization_id=550e8400"`
+- `--raw-filter` - Raw filter query (see [Filter Query Language](#filter-query-language) for format)
+  - Mutually exclusive with `--filter`
+
+**Examples:**
+
+```bash
+# List all edge types with interactive paging
+ucctl get edgetypes
+# Filter by exact type name
+ucctl get edgetypes --filter "type_name=member"
+
+# Filter by type name prefix using wildcard
+ucctl get edgetypes --filter "type_name=member%"
+
+# Filter with AND: type name and organization
+ucctl get edgetypes --filter "type_name=member&organization_id=550e8400-e29b-41d4-a716-446655440000"
+
+# Filter with OR: multiple type names
+ucctl get edgetypes --filter "type_name=member|type_name=admin"
+```
+
+#### `ucctl get edgetype <id>`
+
+Get detailed information about a specific AuthZ edge type by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl get edgetype 550e8400-e29b-41d4-a716-446655440000```
+
+#### `ucctl get edges`
+
+List all AuthZ edges with pagination and filtering support.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Pagination Flags:**
+- `-l, --limit` - Maximum number of results to return per page (0 = terminal height, default for interactive mode)
+- `-c, --cursor` - Pagination cursor for fetching the next page
+- `--no-pager` - Disable interactive paging and show all results at once
+
+**Filter Flags:**
+- `-f, --filter` - Filter results using boolean expressions (see [Filter Query Language](#filter-query-language))
+  - Supported keys: `id`, `source_object_id`, `target_object_id`, `created`, `updated`
+  - Example: `--filter "source_object_id=550e8400&target_object_id=660e8400"`
+- `--raw-filter` - Raw filter query (see [Filter Query Language](#filter-query-language) for format)
+  - Mutually exclusive with `--filter`
+
+**Examples:**
+
+```bash
+# List all edges with interactive paging
+ucctl get edges
+# Filter by source object
+ucctl get edges --filter "source_object_id=550e8400-e29b-41d4-a716-446655440000"
+
+# Filter with AND: source and target objects
+ucctl get edges --filter "source_object_id=550e8400-e29b-41d4-a716-446655440000&target_object_id=660e8400-e29b-41d4-a716-446655440001"
+
+# Filter with OR: multiple source objects
+ucctl get edges --filter "source_object_id=550e8400-e29b-41d4-a716-446655440000|source_object_id=660e8400-e29b-41d4-a716-446655440002"
+```
+
+#### `ucctl get edge <id>`
+
+Get detailed information about a specific AuthZ edge by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl get edge 550e8400-e29b-41d4-a716-446655440000```
+
+---
+
+#### Raw Filter Query Format (`--raw-filter`)
+
+The `--raw-filter` flag provides direct access to the full pagination filter query language. This format gives you complete control over filter operations, including access to additional operators not available in the simplified syntax.
+
+**Query Types:**
+
+1. **LEAF Query** - A single comparison:
+   ```
+   ('KEY',OPERATOR,'VALUE')
+   ```
+
+2. **NESTED Query** - A grouped query:
+   ```
+   (FILTER_QUERY)
+   ```
+
+3. **COMPOSITE Query** - Multiple queries combined with logical operators:
+   ```
+   (FILTER_QUERY,LOGICAL_OP,FILTER_QUERY)
+   (FILTER_QUERY,LOGICAL_OP,FILTER_QUERY,LOGICAL_OP,FILTER_QUERY)
+   ```
+
+**Operators:**
+
+| Type | Operator | SQL Equivalent | Description |
+|------|----------|----------------|-------------|
+| **COMPARISON** | `EQ` | `=` | Equal to |
+| | `NE` | `!=` | Not equal to |
+| | `GT` | `>` | Greater than |
+| | `GE` | `>=` | Greater than or equal to |
+| | `LT` | `<` | Less than |
+| | `LE` | `<=` | Less than or equal to |
+| **PATTERN** | `LK` | `LIKE` | Pattern match with `%` and `_` wildcards |
+| | `NL` | `NOT LIKE` | Negated pattern match |
+| **ARRAY** | `HAS` | `ANY` | Check if value exists in array |
+| **LOGICAL** | `AND` | `AND` | Logical AND (higher precedence) |
+| | `OR` | `OR` | Logical OR (lower precedence) |
+
+**Key Types:**
+
+Different field types support different operators:
+
+- **StringKeyType**: Supports COMPARISON and PATTERN operators
+- **IntKeyType**: Supports COMPARISON operators only
+- **BoolKeyType**: Supports COMPARISON operators only
+- **UUIDKeyType**: Supports COMPARISON operators only
+- **TimestampKeyType**: Supports COMPARISON operators only (value in microseconds since epoch)
+- **ArrayKeyType**: Supports ARRAY operators only
+- **UUIDArrayKeyType**: Supports ARRAY operators only
+- **Nullable types**: Can match NULL or their base type
+
+**Pattern Matching:**
+
+For PATTERN operators (`LK`, `NL`):
+- `%` matches zero or more characters
+- `_` matches exactly one character
+- Escape special characters with `\` (e.g., `\%` matches literal `%`, `\_` matches literal `_`)
+
+**Examples:**
+
+```bash
+# Simple equality
+--raw-filter "('type_name',EQ,'user')"
+
+# Pattern matching with wildcard
+--raw-filter "('type_name',LK,'user%')"
+
+# Greater than comparison
+--raw-filter "('created',GT,'1609459200000000')"
+
+# Composite AND query
+--raw-filter "(('type_name',EQ,'user'),AND,('organization_id',EQ,'550e8400-e29b-41d4-a716-446655440000'))"
+
+# Composite OR query
+--raw-filter "(('type_name',LK,'user%'),OR,('type_name',EQ,'admin'))"
+
+# Complex nested query with grouping
+--raw-filter "((('type_name',LK,'user%'),OR,('type_name',EQ,'admin')),AND,('organization_id',EQ,'550e8400-e29b-41d4-a716-446655440000'))"
+
+# Array membership check
+--raw-filter "('tags',HAS,'production')"
+
+# Negated pattern match
+--raw-filter "('type_name',NL,'test%')"
+```
+
+**Operator Precedence:**
+
+When multiple logical operators appear in a composite query without explicit grouping, standard SQL precedence applies:
+- All consecutive `AND` operations are grouped together first
+- Then `OR` operations are evaluated
+
+For example: `(A,OR,B,AND,C,AND,D)` is evaluated as `(A,OR,(B,AND,C,AND,D))`
+
+To control evaluation order, use nested queries: `((A,OR,B),AND,(C,OR,D))`
+
+**Important Notes:**
+
+- The `--filter` and `--raw-filter` flags are mutually exclusive - you cannot use both at once
+- Field names (keys) must be valid for the resource type being queried
+- String values with quotes must be escaped: use `\'` or `\"`
+- The raw filter format is passed directly to the API without client-side validation
+
+---
+
+### Delete Commands
+
+Commands for deleting UserClouds resources.
+
+**Note:** Delete operations are permanent and cannot be undone. Use with caution.
+
+#### `ucctl delete object <id>`
+
+Delete an AuthZ object by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl ctx use tenant-foo
+ucctl delete object 550e8400-e29b-41d4-a716-446655440000```
+
+#### `ucctl delete objecttype <id>`
+
+Delete an AuthZ object type by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl delete objecttype 550e8400-e29b-41d4-a716-446655440000```
+
+**Note:** Cannot delete object types that have existing objects. Delete all objects first.
+
+#### `ucctl delete edge <id>`
+
+Delete an AuthZ edge by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl delete edge 550e8400-e29b-41d4-a716-446655440000```
+
+#### `ucctl delete edgetype <id>`
+
+Delete an AuthZ edge type by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Examples:**
+
+```bash
+ucctl delete edgetype 550e8400-e29b-41d4-a716-446655440000```
+
+**Note:** Cannot delete edge types that have existing edges. Delete all edges of this type first.
+
+---
+
 ### Set Commands
 
 Commands for setting properties on UserClouds resources.
+
+**Important Note on Resource Immutability:**
+- **Object Types** and **Edges** are immutable after creation and cannot be updated
+- Only **Objects** (via alias) and **Edge Types** (via all fields) support update operations
+
+#### `ucctl set object <id>`
+
+Update an AuthZ object's alias field by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Update Flags (must specify one):**
+- `-a, --alias` - New alias for the object
+- `--clear-alias` - Clear the alias (set to null)
+
+**Examples:**
+
+Set an alias:
+```bash
+ucctl ctx use tenant-foo
+ucctl set object 550e8400-e29b-41d4-a716-446655440000 --alias "user-admin"```
+
+Clear an alias:
+```bash
+ucctl set object 550e8400-e29b-41d4-a716-446655440000 --clear-alias```
+
+**Notes:**
+- Only the alias field can be updated on objects
+- Other object fields (type_id, organization_id) are immutable
+- You must specify either `--alias` or `--clear-alias`, but not both
+
+#### `ucctl set edgetype <id>`
+
+Update an AuthZ edge type by its ID.
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
+- `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
+
+**Update Flags (all required):**
+- `--type-name` - New type name for the edge type
+- `--source-object-type-id` - Source object type ID (UUID)
+- `--target-object-type-id` - Target object type ID (UUID)
+
+**Optional Flags:**
+- `--attributes` - JSON string of edge type attributes
+
+**Examples:**
+
+Update edge type with basic fields:
+```bash
+ucctl ctx use tenant-foo
+ucctl set edgetype 550e8400-e29b-41d4-a716-446655440000 \
+  --type-name "member" \
+  --source-object-type-id 660e8400-e29b-41d4-a716-446655440001 \
+  --target-object-type-id 770e8400-e29b-41d4-a716-446655440002 \
+ ```
+
+Update edge type with attributes:
+```bash
+ucctl set edgetype 550e8400-e29b-41d4-a716-446655440000 \
+  --type-name "member" \
+  --source-object-type-id 660e8400-e29b-41d4-a716-446655440001 \
+  --target-object-type-id 770e8400-e29b-41d4-a716-446655440002 \
+  --attributes '{"role":"admin","permissions":["read","write"]}' \
+ ```
+
+**Notes:**
+- All edge type fields are updatable
+- All required flags must be provided (even if not changing)
+- Attributes must be valid JSON if provided
+- Time-based fields (created, updated) are managed automatically
 
 #### `ucctl set admin`
 
 Set admin privileges for a user on a tenant or company.
 
-**Connection Flags (provide either via flags or use context):**
-- `--url` - IDP URL (or use current context)
-- `--console-tenant-url` - Console tenant URL (required for company operations)
-- `--client-id` - OAuth2 client ID (or use current context)
-- `--client-secret` - OAuth2 client secret (or use current context)
+**Important:** The command uses the current context:
+- **For tenant operations**: Switch to the tenant context first
+- **For company operations**: Switch to the console tenant context first
+
+**Connection Flags (override context):**
+- `--url` - Tenant URL (overrides context)
+- `--client-id` - OAuth2 client ID (overrides context)
+- `--client-secret` - OAuth2 client secret (overrides context)
 - `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
-- `--use-context` - Explicitly use the current context from config
 
 **User Identification (must specify one):**
 - `-e, --email` - User email address
@@ -303,36 +871,50 @@ Set admin privileges for a user on a tenant or company.
 
 **Examples:**
 
-Grant admin privileges on a tenant using context and email:
+**Grant admin privileges on a tenant:**
+
 ```bash
+# Switch to the tenant context
+ucctl ctx use tenant-foo
+
+# Grant admin using email
 ucctl set admin \
-  --use-context \
   --email user@example.com \
   --tenant-id 550e8400-e29b-41d4-a716-446655440000
-```
 
-Grant admin privileges on a company using explicit credentials:
-```bash
+# Or using user ID
 ucctl set admin \
-  --url https://api.userclouds.com \
-  --console-tenant-url https://console.userclouds.com \
-  --client-id my-client \
-  --email user@example.com \
-  --company-id 550e8400-e29b-41d4-a716-446655440001
-```
-
-Grant admin using user ID instead of email:
-```bash
-ucctl set admin \
-  --use-context \
   --user-id 660e8400-e29b-41d4-a716-446655440002 \
   --tenant-id 550e8400-e29b-41d4-a716-446655440000 \
   --verbose
 ```
 
+**Grant admin privileges on a company:**
+
+```bash
+# Switch to the console tenant context (companies are managed through console)
+ucctl ctx use console-prod
+
+# Grant admin on company
+ucctl set admin \
+  --email user@example.com \
+  --company-id 550e8400-e29b-41d4-a716-446655440001
+```
+
+**Using explicit connection flags:**
+
+```bash
+ucctl set admin \
+  --url https://foo.userclouds.com \
+  --client-id my-client \
+  --client-secret my-secret \
+  --email user@example.com \
+  --tenant-id 550e8400-e29b-41d4-a716-446655440000
+```
+
 **Notes:**
-- **For tenant operations**: Uses the `--url` to connect to the tenant's authz system
-- **For company operations**: Uses the `--console-tenant-url` to connect to the console tenant (companies are managed through the console tenant)
+- **For tenant operations**: The command connects to the tenant's authz system using the current context
+- **For company operations**: The command connects to the console tenant's authz system (companies are managed through the console tenant)
 - When using `--email`, the command searches for the user by email address (tries OIDC first, then password auth)
 - If multiple users have the same email, you must use `--user-id` instead
 - The command adds the user to the target tenant/company group with the `admin` role
@@ -484,53 +1066,74 @@ contexts:
 
 ## Common Workflows
 
-### Setting Up Multiple Environments
+### Setting Up Console and Tenant Contexts
 
 ```bash
-# Configure local development environment
-ucctl ctx set local \
-  --url http://localhost:8080 \
-  --console-tenant-url http://localhost:8080 \
-  --client-id local-client \
-  --client-secret local-secret
+# First, create the console tenant context
+ucctl ctx set console-prod \
+  --url https://console.userclouds.com \
+  --client-id console-client \
+  --client-secret console-secret \
+  --console-tenant
 
-# Configure staging environment
-ucctl ctx set staging \
-  --url https://staging.userclouds.com \
-  --console-tenant-url https://console-staging.userclouds.com \
-  --client-id staging-client \
-  --client-secret staging-secret
+# Create tenant contexts that reference the console
+ucctl ctx set tenant-foo \
+  --url https://foo.userclouds.com \
+  --client-id foo-client \
+  --client-secret foo-secret \
+  --console console-prod
 
-# Configure production environment
-ucctl ctx set prod \
-  --url https://prod.userclouds.com \
-  --console-tenant-url https://console.userclouds.com \
-  --client-id prod-client \
-  --client-secret prod-secret
+ucctl ctx set tenant-bar \
+  --url https://bar.userclouds.com \
+  --client-id bar-client \
+  --client-secret bar-secret \
+  --console console-prod
 
 # List all contexts
 ucctl ctx list
 
-# Switch to staging
-ucctl ctx use staging
+# Switch between contexts
+ucctl ctx use tenant-foo
 ```
 
-### Creating Console Employees Across Environments
+### Creating Console Employees and Managing Companies
 
 ```bash
-# Create console employee in local environment
-ucctl ctx use local
+# Switch to console tenant context
+ucctl ctx use console-prod
+
+# Create a console employee
 ucctl create user \
-  --username testuser \
-  --password Test123! \
-  --email test@example.com \
+  --username admin \
+  --password AdminPass123! \
+  --email admin@example.com \
+  --name "Admin User" \
   --organization-id <console-org-id>
 
-# Grant admin privileges on a company
+# Grant admin privileges on a company (still in console context)
 ucctl set admin \
-  --use-context \
-  --email test@example.com \
+  --email admin@example.com \
   --company-id <company-uuid>
+```
+
+### Creating and Managing Tenant Users
+
+```bash
+# Switch to tenant context
+ucctl ctx use tenant-foo
+
+# Create a tenant user
+ucctl create user \
+  --username customer1 \
+  --password CustomerPass123! \
+  --email customer@example.com \
+  --name "Customer User" \
+  --organization-id <tenant-org-id>
+
+# Grant admin privileges on the tenant (still in tenant context)
+ucctl set admin \
+  --email customer@example.com \
+  --tenant-id <tenant-uuid>
 ```
 
 ### Syncing Configuration Between Environments
@@ -587,11 +1190,25 @@ ucctl completion powershell > ucctl.ps1
 This occurs when no context is configured or active. Fix it by:
 
 ```bash
-# Set and use a context
-ucctl ctx set myenv --url <url> --console-tenant-url <console-url> --client-id <id> --client-secret <secret>
+# Create a console tenant context
+ucctl ctx set console-prod \
+  --url https://console.userclouds.com \
+  --client-id console-client \
+  --client-secret console-secret \
+  --console-tenant
+
+# Or create a tenant context (requires a console tenant context first)
+ucctl ctx set tenant-foo \
+  --url https://foo.userclouds.com \
+  --client-id foo-client \
+  --client-secret foo-secret \
+  --console console-prod
+
+# Switch to the context
+ucctl ctx use console-prod
 
 # Or explicitly provide connection flags
-ucctl create user --console-tenant-url <console-url> --client-id <id> --client-secret <secret> ...
+ucctl create user --url <url> --client-id <id> --client-secret <secret> ...
 ```
 
 ### "Client secret is not set" error

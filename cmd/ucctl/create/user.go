@@ -3,21 +3,15 @@ package create
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/gofrs/uuid"
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 
-	"userclouds.com/cmd/ucctl/config"
+	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/idp"
 	"userclouds.com/idp/userstore"
-	"userclouds.com/infra/jsonclient"
 	"userclouds.com/infra/oidc"
-)
-
-const (
-	DefaultClientSecretVar = "UC_CLIENT_SECRET"
 )
 
 // UserCommand handles the create user subcommand
@@ -27,7 +21,7 @@ type UserCommand struct {
 	ClientID        string
 	ClientSecret    string
 	ClientSecretVar string
-	UseContext      bool
+	AuthnType       string
 	OrganizationID  string
 	Email           string
 	Name            string
@@ -37,6 +31,9 @@ type UserCommand struct {
 	OIDCIssuerURL   string
 	OIDCSubject     string
 	Verbose         bool
+
+	// credentials holds the loaded credentials
+	credentials *common.Credentials
 }
 
 // RunE executes the create user command
@@ -60,45 +57,18 @@ func (c *UserCommand) validate() error {
 		return fmt.Errorf("organization id is required")
 	}
 
-	// If using context, load from config
-	if c.UseContext || (c.URL == "" && c.ClientID == "" && c.ClientSecret == "") {
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-
-		ctx, err := cfg.GetCurrentContext()
-		if err != nil {
-			return fmt.Errorf("no current context set. Use 'ucctl context use <name>' or provide --url, --client-id, and --client-secret")
-		}
-
-		// Use current context directly - it should be set to the appropriate tenant
-		if c.URL == "" {
-			c.URL = ctx.URL
-		}
-		if c.ClientID == "" {
-			c.ClientID = ctx.ClientID
-		}
-		if c.ClientSecret == "" {
-			c.ClientSecret = ctx.ClientSecret
-		}
+	// Load credentials from context or flags
+	creds, err := common.LoadCredentialsFromContext(
+		
+		c.URL,
+		c.ClientID,
+		c.ClientSecret,
+		c.ClientSecretVar,
+	)
+	if err != nil {
+		return err
 	}
-
-	if c.URL == "" {
-		return fmt.Errorf("URL is required (use --url or set a context)")
-	}
-
-	if c.ClientID == "" {
-		return fmt.Errorf("client ID is required (use --client-id or set a context)")
-	}
-
-	// Get client secret from environment variable if not set directly
-	if c.ClientSecret == "" {
-		c.ClientSecret = os.Getenv(c.ClientSecretVar)
-		if c.ClientSecret == "" {
-			return fmt.Errorf("client secret is required (use --client-secret, set %s env var, or use a context)", c.ClientSecretVar)
-		}
-	}
+	c.credentials = creds
 
 	// Validate authentication method (optional - can create user without authn)
 	hasPassword := c.Username != "" && c.Password != ""
@@ -127,14 +97,14 @@ func (c *UserCommand) createUser(ctx context.Context) error {
 	spinner, _ := pterm.DefaultSpinner.Start("Initializing...")
 
 	// Create client credentials option
-	credOpt, err := jsonclient.ClientCredentialsForURL(c.URL, c.ClientID, c.ClientSecret, nil)
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
 		spinner.Fail("Failed to create client credentials")
 		return fmt.Errorf("failed to create client credentials: %w", err)
 	}
 
 	// Create IDP management client
-	mgmtClient, err := idp.NewManagementClient(c.URL, credOpt)
+	mgmtClient, err := idp.NewManagementClient(c.credentials.URL, credOpt)
 	if err != nil {
 		spinner.Fail("Failed to create IDP client")
 		return fmt.Errorf("failed to create IDP client: %w", err)

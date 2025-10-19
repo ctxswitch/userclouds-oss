@@ -235,6 +235,7 @@ func (m pagerModel[T]) renderTableInitial() ([]string, []int) {
 
 	// Calculate actual widths (use fixed width or compute max from data)
 	actualWidths := make([]int, len(columns))
+
 	for i, col := range columns {
 		if col.Width > 0 {
 			// Fixed width column
@@ -258,7 +259,7 @@ func (m pagerModel[T]) renderTableInitial() ([]string, []int) {
 	// Render header
 	headerParts := make([]string, len(columns))
 	for i, col := range columns {
-		headerParts[i] = padOrTruncate(col.Header, actualWidths[i])
+		headerParts[i] = padOrTruncate(col.Header, actualWidths[i], col.Width == 0)
 	}
 	lines = append(lines, strings.Join(headerParts, "   "))
 
@@ -270,7 +271,8 @@ func (m pagerModel[T]) renderTableInitial() ([]string, []int) {
 			if i < len(row) {
 				cellValue = row[i]
 			}
-			rowParts[i] = padOrTruncate(cellValue, actualWidths[i])
+			// Truncate dynamic columns (Width == 0), don't truncate fixed columns
+			rowParts[i] = padOrTruncate(cellValue, actualWidths[i], columns[i].Width == 0)
 		}
 		lines = append(lines, strings.Join(rowParts, "   "))
 	}
@@ -298,7 +300,8 @@ func (m pagerModel[T]) renderTableIncremental(newItems []T) []string {
 				cellValue = row[i]
 			}
 			width := m.columnWidths[i]
-			rowParts[i] = padOrTruncate(cellValue, width)
+			// Truncate dynamic columns (Width == 0), don't truncate fixed columns
+			rowParts[i] = padOrTruncate(cellValue, width, columns[i].Width == 0)
 		}
 		lines = append(lines, strings.Join(rowParts, "   "))
 	}
@@ -370,11 +373,22 @@ func (m pagerModel[T]) View() string {
 	return b.String()
 }
 
-// padOrTruncate pads a string to the specified width (no truncation for horizontal scroll)
-func padOrTruncate(s string, width int) string {
-	if len(s) >= width {
+// padOrTruncate pads or truncates a string to the specified width
+// If truncate is true, strings longer than width will be truncated with "..."
+// If truncate is false, strings can extend beyond width (for horizontal scrolling)
+func padOrTruncate(s string, width int, truncate bool) string {
+	if len(s) > width {
+		if truncate {
+			// Truncate with ellipsis
+			if width <= 3 {
+				return s[:width]
+			}
+			return s[:width-3] + "..."
+		}
+		// Don't truncate - allow horizontal scrolling
 		return s
 	}
+	// Pad to width
 	return s + strings.Repeat(" ", width-len(s))
 }
 
@@ -461,7 +475,7 @@ func runNonInteractive[T any](config PagerConfig[T]) error {
 	// Print header
 	headerParts := make([]string, len(columns))
 	for i, col := range columns {
-		headerParts[i] = padOrTruncate(col.Header, actualWidths[i])
+		headerParts[i] = padOrTruncate(col.Header, actualWidths[i], false)
 	}
 	fmt.Println(strings.Join(headerParts, "   "))
 
@@ -473,7 +487,8 @@ func runNonInteractive[T any](config PagerConfig[T]) error {
 			if i < len(row) {
 				cellValue = row[i]
 			}
-			rowParts[i] = padOrTruncate(cellValue, actualWidths[i])
+			// Don't truncate in non-interactive mode - let terminal handle it
+			rowParts[i] = padOrTruncate(cellValue, actualWidths[i], false)
 		}
 		fmt.Println(strings.Join(rowParts, "   "))
 	}

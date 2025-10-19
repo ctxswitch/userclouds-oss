@@ -440,6 +440,7 @@ func DeleteObjectCommand() *cobra.Command {
 	}
 
 	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+	cmd.Flags().BoolVarP(&dc.AutoApprove, "auto-approve", "y", false, "automatically approve deletion without prompting")
 
 	return cmd
 }
@@ -454,6 +455,7 @@ func DeleteObjectTypeCommand() *cobra.Command {
 	}
 
 	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+	cmd.Flags().BoolVarP(&dc.AutoApprove, "auto-approve", "y", false, "automatically approve deletion without prompting")
 
 	return cmd
 }
@@ -468,6 +470,7 @@ func DeleteEdgeCommand() *cobra.Command {
 	}
 
 	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+	cmd.Flags().BoolVarP(&dc.AutoApprove, "auto-approve", "y", false, "automatically approve deletion without prompting")
 
 	return cmd
 }
@@ -482,6 +485,7 @@ func DeleteEdgeTypeCommand() *cobra.Command {
 	}
 
 	common.AddAuthFlags(cmd, &dc.URL, &dc.ClientID, &dc.ClientSecret, &dc.ClientSecretVar, &dc.AuthnType)
+	cmd.Flags().BoolVarP(&dc.AutoApprove, "auto-approve", "y", false, "automatically approve deletion without prompting")
 
 	return cmd
 }

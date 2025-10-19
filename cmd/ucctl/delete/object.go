@@ -16,6 +16,7 @@ type ObjectCommand struct {
 	ClientSecret    string
 	ClientSecretVar string
 	AuthnType       string
+	AutoApprove     bool
 
 	credentials *common.Credentials
 }
@@ -55,6 +56,12 @@ func (c *ObjectCommand) RunE(cmd *cobra.Command, args []string) error {
 	azClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt))
 	if err != nil {
 		return fmt.Errorf("failed to create AuthZ client: %w", err)
+	}
+
+	// Prompt for confirmation
+	if !common.ConfirmDeletion("object", objectID.String(), c.AutoApprove) {
+		fmt.Println("Deletion cancelled")
+		return nil
 	}
 
 	// Delete the object

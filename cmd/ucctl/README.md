@@ -704,7 +704,13 @@ To control evaluation order, use nested queries: `((A,OR,B),AND,(C,OR,D))`
 
 Commands for deleting UserClouds resources.
 
-**Note:** Delete operations are permanent and cannot be undone. Use with caution.
+**Important:** Delete operations are permanent and cannot be undone. All delete commands require explicit confirmation before proceeding, unless the `--auto-approve` or `-y` flag is used.
+
+**Confirmation Behavior:**
+- By default, you will be prompted with `Are you sure you want to delete {resource_type} {id}? [y/N]:`
+- Type `y` or `yes` to confirm deletion
+- Type `n`, `no`, or press Enter to cancel
+- Use `--auto-approve` or `-y` to skip the confirmation prompt (useful for automation)
 
 #### `ucctl delete object <id>`
 
@@ -716,11 +722,22 @@ Delete an AuthZ object by its ID.
 - `--client-secret` - OAuth2 client secret (overrides context)
 - `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
 
+**Delete Flags:**
+- `-y, --auto-approve` - Automatically approve deletion without prompting
+
 **Examples:**
 
 ```bash
+# Interactive deletion with confirmation prompt
 ucctl ctx use tenant-foo
 ucctl delete object 550e8400-e29b-41d4-a716-446655440000
+# Prompts: Are you sure you want to delete object 550e8400-e29b-41d4-a716-446655440000? [y/N]:
+
+# Auto-approve (no prompt) - useful for scripts
+ucctl delete object 550e8400-e29b-41d4-a716-446655440000 -y
+
+# Auto-approve with long flag
+ucctl delete object 550e8400-e29b-41d4-a716-446655440000 --auto-approve
 ```
 
 #### `ucctl delete objecttype <id>`
@@ -733,10 +750,17 @@ Delete an AuthZ object type by its ID.
 - `--client-secret` - OAuth2 client secret (overrides context)
 - `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
 
+**Delete Flags:**
+- `-y, --auto-approve` - Automatically approve deletion without prompting
+
 **Examples:**
 
 ```bash
+# Interactive deletion with confirmation prompt
 ucctl delete objecttype 550e8400-e29b-41d4-a716-446655440000
+
+# Auto-approve (no prompt)
+ucctl delete objecttype 550e8400-e29b-41d4-a716-446655440000 -y
 ```
 
 **Note:** Cannot delete object types that have existing objects. Delete all objects first.
@@ -751,10 +775,17 @@ Delete an AuthZ edge by its ID.
 - `--client-secret` - OAuth2 client secret (overrides context)
 - `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
 
+**Delete Flags:**
+- `-y, --auto-approve` - Automatically approve deletion without prompting
+
 **Examples:**
 
 ```bash
+# Interactive deletion with confirmation prompt
 ucctl delete edge 550e8400-e29b-41d4-a716-446655440000
+
+# Auto-approve (no prompt)
+ucctl delete edge 550e8400-e29b-41d4-a716-446655440000 -y
 ```
 
 #### `ucctl delete edgetype <id>`
@@ -767,10 +798,17 @@ Delete an AuthZ edge type by its ID.
 - `--client-secret` - OAuth2 client secret (overrides context)
 - `--client-secret-var` - Environment variable containing client secret (default: `UC_CLIENT_SECRET`)
 
+**Delete Flags:**
+- `-y, --auto-approve` - Automatically approve deletion without prompting
+
 **Examples:**
 
 ```bash
+# Interactive deletion with confirmation prompt
 ucctl delete edgetype 550e8400-e29b-41d4-a716-446655440000
+
+# Auto-approve (no prompt)
+ucctl delete edgetype 550e8400-e29b-41d4-a716-446655440000 -y
 ```
 
 **Note:** Cannot delete edge types that have existing edges. Delete all edges of this type first.

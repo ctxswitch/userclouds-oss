@@ -7,13 +7,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"userclouds.com/cmd/ucctl/config"
+	"userclouds.com/cmd/ucctl/common"
+	"userclouds.com/infra/secret"
 )
 
 // getContextNames returns a sorted list of available context names for completion
 func getContextNames() []string {
-	cfg, err := config.Load("")
+	cfg, err := common.Load("")
 	if err != nil {
 		return []string{}
 	}
@@ -35,33 +35,11 @@ func ValidContextArgs(cmd *cobra.Command, args []string, toComplete string) ([]s
 	return getContextNames(), cobra.ShellCompDirectiveNoFileComp
 }
 
-// getConsoleTenantNames returns a sorted list of console tenant context names for completion
-func getConsoleTenantNames() []string {
-	cfg, err := config.Load("")
-	if err != nil {
-		return []string{}
-	}
-
-	names := make([]string, 0, len(cfg.Contexts))
-	for name, ctx := range cfg.Contexts {
-		if ctx.IsConsoleTenant {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
-}
-
-// ValidConsoleTenantArgs provides dynamic completion for console tenant names
-func ValidConsoleTenantArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return getConsoleTenantNames(), cobra.ShellCompDirectiveNoFileComp
-}
-
 // ListCommand lists all contexts
 type ListCommand struct{}
 
 func (c *ListCommand) RunE(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load("")
+	cfg, err := common.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -80,7 +58,7 @@ func (c *ListCommand) RunE(cmd *cobra.Command, args []string) error {
 
 	// Print contexts in a table format
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "CURRENT\tNAME\tTYPE\tURL")
+	fmt.Fprintln(w, "CURRENT\tNAME\tURL")
 
 	for _, name := range names {
 		ctx := cfg.Contexts[name]
@@ -88,11 +66,7 @@ func (c *ListCommand) RunE(cmd *cobra.Command, args []string) error {
 		if name == cfg.CurrentContext {
 			current = "*"
 		}
-		contextType := "tenant"
-		if ctx.IsConsoleTenant {
-			contextType = "console"
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", current, name, contextType, ctx.URL)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", current, name, ctx.URL)
 	}
 
 	return w.Flush()
@@ -108,7 +82,7 @@ func (c *UseCommand) RunE(cmd *cobra.Command, args []string) error {
 
 	contextName := args[0]
 
-	cfg, err := config.Load("")
+	cfg, err := common.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -130,14 +104,12 @@ type SetCommand struct {
 	URL      string
 	ClientID string
 	// TODO: this should be a secret string.
-	ClientSecret    string
-	Console         string
-	IsConsoleTenant bool
+	ClientSecret string
 }
 
 func (c *SetCommand) RunE(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: ucctl context set <context-name> --url <url> --client-id <id> --client-secret <secret> [--console <console-tenant-name> | --console-tenant]")
+		return fmt.Errorf("usage: ucctl context set <context-name> --url <url> --client-id <id> --client-secret <secret>")
 	}
 
 	contextName := args[0]
@@ -153,37 +125,28 @@ func (c *SetCommand) RunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--client-secret is required")
 	}
 
-	// Validate console tenant logic
-	if c.IsConsoleTenant && c.Console != "" {
-		return fmt.Errorf("cannot specify both --console-tenant and --console (console tenants cannot reference other consoles)")
-	}
-
-	if !c.IsConsoleTenant && c.Console == "" {
-		return fmt.Errorf("--console is required for regular tenant contexts (or use --console-tenant to create a console tenant)")
-	}
-
-	cfg, err := config.Load("")
+	cfg, err := common.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// If this is a regular tenant context, validate that the console reference exists
-	if !c.IsConsoleTenant {
-		consoleCtx, err := cfg.GetContext(c.Console)
-		if err != nil {
-			return fmt.Errorf("console tenant %q not found. Create it first with --console-tenant flag", c.Console)
+	// Parse and validate the client secret
+	var clientSecret secret.String
+	if hasSecretPrefix(c.ClientSecret) {
+		// If it has a prefix, use it as a location and validate
+		clientSecret = *secret.FromLocation(c.ClientSecret)
+		if err := clientSecret.Validate(); err != nil {
+			return fmt.Errorf("invalid client secret: %w", err)
 		}
-		if !consoleCtx.IsConsoleTenant {
-			return fmt.Errorf("referenced context %q is not a console tenant", c.Console)
-		}
+	} else {
+		// If no prefix, wrap it as a dev-literal secret
+		clientSecret = secret.NewTestString(c.ClientSecret)
 	}
 
-	ctx := &config.Context{
-		URL:             c.URL,
-		ClientID:        c.ClientID,
-		ClientSecret:    c.ClientSecret,
-		ConsoleTenant:   c.Console,
-		IsConsoleTenant: c.IsConsoleTenant,
+	ctx := &common.Context{
+		URL:          c.URL,
+		ClientID:     c.ClientID,
+		ClientSecret: clientSecret,
 	}
 
 	cfg.SetContext(contextName, ctx)
@@ -197,11 +160,7 @@ func (c *SetCommand) RunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	contextType := "tenant"
-	if c.IsConsoleTenant {
-		contextType = "console tenant"
-	}
-	fmt.Printf("%s context %q set\n", contextType, contextName)
+	fmt.Printf("Context %q set\n", contextName)
 	if cfg.CurrentContext == contextName {
 		fmt.Printf("Switched to context %q\n", contextName)
 	}
@@ -219,7 +178,7 @@ func (c *DeleteCommand) RunE(cmd *cobra.Command, args []string) error {
 
 	contextName := args[0]
 
-	cfg, err := config.Load("")
+	cfg, err := common.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -240,46 +199,104 @@ func (c *DeleteCommand) RunE(cmd *cobra.Command, args []string) error {
 type ShowCommand struct{}
 
 func (c *ShowCommand) RunE(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load("")
+	cfg, err := common.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	if cfg.CurrentContext == "" {
-		fmt.Println("No current context set")
-		return nil
-	}
+	// Determine which context to show
+	var contextName string
+	var ctx *common.Context
 
-	ctx, err := cfg.GetCurrentContext()
-	if err != nil {
-		return err
-	}
-
-	contextType := "Tenant"
-	if ctx.IsConsoleTenant {
-		contextType = "Console Tenant"
-	}
-
-	fmt.Printf("Current context: %s\n", cfg.CurrentContext)
-	fmt.Printf("Type: %s\n", contextType)
-	fmt.Printf("URL: %s\n", ctx.URL)
-	fmt.Printf("Client ID: %s\n", ctx.ClientID)
-	fmt.Printf("Client Secret: %s\n", maskSecret(ctx.ClientSecret))
-
-	if !ctx.IsConsoleTenant && ctx.ConsoleTenant != "" {
-		fmt.Printf("Console Tenant: %s\n", ctx.ConsoleTenant)
-
-		// Resolve and show console tenant details
-		consoleCtx, err := cfg.GetConsoleTenantContext(ctx)
+	if len(args) > 0 {
+		// Show the specified context
+		contextName = args[0]
+		ctx, err = cfg.GetContext(contextName)
 		if err != nil {
-			fmt.Printf("  (Warning: %v)\n", err)
-		} else {
-			fmt.Printf("  Console URL: %s\n", consoleCtx.URL)
-			fmt.Printf("  Console Client ID: %s\n", consoleCtx.ClientID)
+			return err
+		}
+	} else {
+		// Show the current context
+		if cfg.CurrentContext == "" {
+			fmt.Println("No current context set")
+			return nil
+		}
+		contextName = cfg.CurrentContext
+		ctx, err = cfg.GetCurrentContext()
+		if err != nil {
+			return err
 		}
 	}
 
+	// Display context information
+	if contextName == cfg.CurrentContext {
+		fmt.Printf("Current context: %s\n", contextName)
+	} else {
+		fmt.Printf("Context: %s\n", contextName)
+	}
+
+	fmt.Printf("URL: %s\n", ctx.URL)
+	fmt.Printf("Client ID: %s\n", ctx.ClientID)
+
+	// Always display the masked client secret value
+	secretLocationBytes, _ := ctx.ClientSecret.MarshalText()
+	secretLocation := string(secretLocationBytes)
+	fmt.Printf("Client Secret: %s\n", maskSecretWithSuffix(secretLocation))
+
+	// If it's an external secret, also show the location
+	if secretLocation != "" && !isPlainSecret(secretLocation) {
+		fmt.Printf("Secret Location: %s\n", secretLocation)
+	}
+
 	return nil
+}
+
+// isPlainSecret checks if the secret location is a plain secret (no prefix or dev-literal)
+func isPlainSecret(location string) bool {
+	return location == "" ||
+		   !hasSecretPrefix(location) ||
+		   startsWithPrefix(location, "dev-literal://")
+}
+
+// hasSecretPrefix checks if the location has any secret provider prefix
+func hasSecretPrefix(location string) bool {
+	prefixes := []string{
+		"dev://",
+		"dev-literal://",
+		"env://",
+		"aws://",
+		"kube://",
+	}
+	for _, prefix := range prefixes {
+		if startsWithPrefix(location, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// startsWithPrefix checks if s starts with prefix
+func startsWithPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+// maskSecretWithSuffix masks a secret but shows the last 4 characters for reference
+func maskSecretWithSuffix(location string) string {
+	// For external secrets (env://, aws://, kube://), just show masked
+	if location != "" && !isPlainSecret(location) && !startsWithPrefix(location, "dev-literal://") {
+		return "****"
+	}
+
+	// For dev-literal://, strip the prefix and show last 4 chars
+	secret := location
+	if startsWithPrefix(secret, "dev-literal://") {
+		secret = secret[len("dev-literal://"):]
+	}
+
+	if len(secret) <= 4 {
+		return "****"
+	}
+	return "****" + secret[len(secret)-4:]
 }
 
 // maskSecret masks all but the last 4 characters of a secret

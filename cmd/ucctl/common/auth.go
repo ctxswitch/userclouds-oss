@@ -11,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
-	"userclouds.com/cmd/ucctl/config"
 	"userclouds.com/infra/jsonclient"
 	"userclouds.com/infra/oidc"
 	"userclouds.com/infra/secret"
@@ -56,25 +55,36 @@ type Credentials struct {
 // 2. Environment variables (UC_TENANT_URL, UC_CLIENT_ID, UC_CLIENT_SECRET)
 // 3. Current context from config file
 func LoadCredentialsFromContext(url, clientID, clientSecret, clientSecretVar, configPath string) (*Credentials, error) {
+	ctx := context.Background()
+
 	// Start with values from context (lowest priority)
 	contextURL := ""
 	contextClientID := ""
-	contextClientSecret := ""
+	var contextClientSecret secret.String
 
-	cfg, err := config.Load(configPath)
+	cfg, err := Load(configPath)
 	if err == nil {
-		ctx, err := cfg.GetCurrentContext()
+		ctxObj, err := cfg.GetCurrentContext()
 		if err == nil {
-			contextURL = ctx.URL
-			contextClientID = ctx.ClientID
-			contextClientSecret = ctx.ClientSecret
+			contextURL = ctxObj.URL
+			contextClientID = ctxObj.ClientID
+			contextClientSecret = ctxObj.ClientSecret
 		}
 	}
 
 	// Apply context values as defaults
 	finalURL := contextURL
 	finalClientID := contextClientID
-	finalClientSecret := contextClientSecret
+	finalClientSecret := ""
+
+	// Resolve the context secret if present
+	if contextClientSecret.String() != "" {
+		resolved, err := (&contextClientSecret).Resolve(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve context client secret: %w", err)
+		}
+		finalClientSecret = resolved
+	}
 
 	// Override with environment variables (medium priority)
 	if envURL := os.Getenv(DefaultTenantURLVar); envURL != "" {
@@ -126,7 +136,9 @@ func LoadCredentialsFromContext(url, clientID, clientSecret, clientSecretVar, co
 // LoadCredentialsFromContextName loads credentials from a named context
 // This is useful when you need to load credentials for a specific context (not the current one)
 func LoadCredentialsFromContextName(contextName, configPath string) (*Credentials, error) {
-	cfg, err := config.Load(configPath)
+	bgCtx := context.Background()
+
+	cfg, err := Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
@@ -136,10 +148,16 @@ func LoadCredentialsFromContextName(contextName, configPath string) (*Credential
 		return nil, fmt.Errorf("context %q not found: %w", contextName, err)
 	}
 
+	// Resolve the client secret
+	clientSecret, err := (&ctx.ClientSecret).Resolve(bgCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve client secret for context %q: %w", contextName, err)
+	}
+
 	return &Credentials{
 		URL:          ctx.URL,
 		ClientID:     ctx.ClientID,
-		ClientSecret: ctx.ClientSecret,
+		ClientSecret: clientSecret,
 		AuthType:     AuthTypeClientCredentials,
 	}, nil
 }

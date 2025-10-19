@@ -257,19 +257,13 @@ func ContextSetCommand() *cobra.Command {
 		Short: "Create or update a context",
 		Long: `Create or update a UserClouds context configuration.
 
-For regular tenant contexts, specify --console to reference a console tenant.
-For console tenant contexts, use the --console-tenant flag.`,
+For global operations, use the console tenant context.`,
 		RunE: sc.RunE,
 	}
 
 	cmd.Flags().StringVarP(&sc.URL, "url", "", "", "UserClouds URL (required)")
 	cmd.Flags().StringVarP(&sc.ClientID, "client-id", "", "", "OAuth2 client ID (required)")
 	cmd.Flags().StringVarP(&sc.ClientSecret, "client-secret", "", "", "OAuth2 client secret (required)")
-	cmd.Flags().StringVarP(&sc.Console, "console", "", "", "Console tenant context name (required for tenant contexts)")
-	cmd.Flags().BoolVarP(&sc.IsConsoleTenant, "console-tenant", "", false, "Mark this context as a console tenant")
-
-	// Register completion function for --console flag
-	_ = cmd.RegisterFlagCompletionFunc("console", context.ValidConsoleTenantArgs)
 
 	return cmd
 }
@@ -288,10 +282,11 @@ func ContextDeleteCommand() *cobra.Command {
 func ContextShowCommand() *cobra.Command {
 	sc := context.ShowCommand{}
 	return &cobra.Command{
-		Use:   "show",
-		Short: "Show current context",
-		Long:  "Display the currently active UserClouds context",
-		RunE:  sc.RunE,
+		Use:               "show [context-name]",
+		Short:             "Show current or specified context",
+		Long:              "Display the currently active UserClouds context, or a specific context if provided",
+		RunE:              sc.RunE,
+		ValidArgsFunction: context.ValidContextArgs,
 	}
 }
 

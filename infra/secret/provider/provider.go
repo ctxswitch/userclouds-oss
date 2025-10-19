@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 
 	"userclouds.com/infra/secret/prefix"
@@ -22,6 +23,9 @@ type Interface interface {
 	Save(ctx context.Context, path, secret string) error
 	Prefix() string
 	IsDev() bool
+	// HasValidParams validates that the query parameters in the secret location are supported
+	// Returns an error if any unsupported parameters are found
+	HasValidParams(params url.Values) error
 }
 
 type Provider struct{}

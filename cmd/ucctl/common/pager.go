@@ -401,22 +401,33 @@ func RunPager[T any](config PagerConfig[T]) error {
 	}
 
 	// Run Bubble Tea pager
+	initialModel := pagerModel[T]{
+		config:       config,
+		items:        []T{},
+		cursor:       config.InitialCursor,
+		scrollOffset: 0,
+		horizOffset:  0,
+		loading:      true,
+		hasMore:      true,
+		isFirstPage:  true,
+	}
+
 	p := tea.NewProgram(
-		pagerModel[T]{
-			config:       config,
-			items:        []T{},
-			cursor:       config.InitialCursor,
-			scrollOffset: 0,
-			horizOffset:  0,
-			loading:      true,
-			hasMore:      true,
-			isFirstPage:  true,
-		},
+		initialModel,
 		tea.WithAltScreen(),
 	)
 
-	_, err := p.Run()
-	return err
+	finalModel, err := p.Run()
+	if err != nil {
+		return err
+	}
+
+	// Check if the pager model has an error (from fetching data)
+	if m, ok := finalModel.(pagerModel[T]); ok && m.err != nil {
+		return m.err
+	}
+
+	return nil
 }
 
 // runNonInteractive dumps all data without pagination

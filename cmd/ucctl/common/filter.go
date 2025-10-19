@@ -15,15 +15,16 @@ var (
 
 // filterToken represents a token in the filter expression
 type filterToken struct {
-	typ   string // "field", "and", "or", "lparen", "rparen"
-	value string
+	typ      string // "field", "and", "or", "lparen", "rparen"
+	value    string
+	operator string // "EQ", "LK", "NE", "NL" (only set for "field" type)
 }
 
 // tokenizeFilter breaks the filter string into tokens
+// Supports operators: = (EQ), =~ (LK), != (NE), !~ (NL)
 func tokenizeFilter(input string) ([]filterToken, error) {
 	var tokens []filterToken
 	var current strings.Builder
-	inField := false
 
 	for i := 0; i < len(input); i++ {
 		ch := input[i]
@@ -31,17 +32,23 @@ func tokenizeFilter(input string) ([]filterToken, error) {
 		switch ch {
 		case '&':
 			if current.Len() > 0 {
-				tokens = append(tokens, filterToken{typ: "field", value: strings.TrimSpace(current.String())})
+				token, err := parseFieldToken(strings.TrimSpace(current.String()))
+				if err != nil {
+					return nil, err
+				}
+				tokens = append(tokens, token)
 				current.Reset()
-				inField = false
 			}
 			tokens = append(tokens, filterToken{typ: "and", value: "&"})
 
 		case '|':
 			if current.Len() > 0 {
-				tokens = append(tokens, filterToken{typ: "field", value: strings.TrimSpace(current.String())})
+				token, err := parseFieldToken(strings.TrimSpace(current.String()))
+				if err != nil {
+					return nil, err
+				}
+				tokens = append(tokens, token)
 				current.Reset()
-				inField = false
 			}
 			tokens = append(tokens, filterToken{typ: "or", value: "|"})
 
@@ -53,21 +60,14 @@ func tokenizeFilter(input string) ([]filterToken, error) {
 
 		case ')':
 			if current.Len() > 0 {
-				tokens = append(tokens, filterToken{typ: "field", value: strings.TrimSpace(current.String())})
+				token, err := parseFieldToken(strings.TrimSpace(current.String()))
+				if err != nil {
+					return nil, err
+				}
+				tokens = append(tokens, token)
 				current.Reset()
-				inField = false
 			}
 			tokens = append(tokens, filterToken{typ: "rparen", value: ")"})
-
-		case ' ', '\t':
-			// Skip whitespace unless we're inside a field value
-			if inField {
-				current.WriteByte(ch)
-			}
-
-		case '=':
-			inField = true
-			current.WriteByte(ch)
 
 		default:
 			current.WriteByte(ch)
@@ -75,10 +75,48 @@ func tokenizeFilter(input string) ([]filterToken, error) {
 	}
 
 	if current.Len() > 0 {
-		tokens = append(tokens, filterToken{typ: "field", value: strings.TrimSpace(current.String())})
+		token, err := parseFieldToken(strings.TrimSpace(current.String()))
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, token)
 	}
 
 	return tokens, nil
+}
+
+// parseFieldToken parses a field expression (key<op>value) and returns a token
+// Supported operators: = (EQ), =~ (LK), != (NE), !~ (NL)
+func parseFieldToken(fieldExpr string) (filterToken, error) {
+	// Try operators in order of length (longest first to avoid partial matches)
+	operators := []struct {
+		symbol string
+		op     string
+	}{
+		{"=~", "LK"},
+		{"!~", "NL"},
+		{"!=", "NE"},
+		{"=", "EQ"},
+	}
+
+	for _, opInfo := range operators {
+		if idx := strings.Index(fieldExpr, opInfo.symbol); idx != -1 {
+			key := strings.TrimSpace(fieldExpr[:idx])
+			value := strings.TrimSpace(fieldExpr[idx+len(opInfo.symbol):])
+
+			if key == "" || value == "" {
+				return filterToken{}, fmt.Errorf("invalid filter format '%s': key and value cannot be empty", fieldExpr)
+			}
+
+			return filterToken{
+				typ:      "field",
+				value:    key + "=" + value, // Store in normalized format for error messages
+				operator: opInfo.op,
+			}, nil
+		}
+	}
+
+	return filterToken{}, fmt.Errorf("invalid filter format '%s': expected key<operator>value (operators: =, =~, !=, !~)", fieldExpr)
 }
 
 // parseFilterExpression recursively parses filter tokens into a filter string
@@ -107,10 +145,10 @@ func parseFilterExpression(tokens []filterToken, validKeys []string) (string, in
 		left = result
 
 	} else if tokens[0].typ == "field" {
-		// Parse field=value
+		// Parse field<op>value
 		parts := strings.SplitN(tokens[0].value, "=", 2)
 		if len(parts) != 2 {
-			return "", 0, fmt.Errorf("invalid filter format '%s': expected key=value", tokens[0].value)
+			return "", 0, fmt.Errorf("invalid filter format '%s': expected key<op>value", tokens[0].value)
 		}
 
 		key := strings.TrimSpace(parts[0])
@@ -132,7 +170,12 @@ func parseFilterExpression(tokens []filterToken, validKeys []string) (string, in
 			return "", 0, fmt.Errorf("unsupported filter field '%s': must be one of %v", key, validKeys)
 		}
 
-		left = fmt.Sprintf("('%s',LK,'%s')", key, value)
+		// Use the operator from the token (EQ, LK, NE, or NL)
+		operator := tokens[0].operator
+		if operator == "" {
+			operator = "EQ" // Default to EQ if not set
+		}
+		left = fmt.Sprintf("('%s',%s,'%s')", key, operator, value)
 		consumed = 1
 
 	} else {
@@ -170,15 +213,22 @@ func parseFilterExpression(tokens []filterToken, validKeys []string) (string, in
 
 // FormatFilterString constructs a filter string from a filter expression
 // Supports:
-//   - key=value for field comparisons
+//   - key=value for exact match (EQ operator)
+//   - key=~value for pattern match with wildcards (LK operator)
+//   - key!=value for not equal (NE operator)
+//   - key!~value for negated pattern match (NL operator)
 //   - & for AND operations
 //   - | for OR operations
 //   - () for grouping
 // Examples:
-//   - "type_name=user"
-//   - "type_name=user&id=123"
-//   - "type_name=user|type_name=admin"
-//   - "(type_name=user|type_name=admin)&organization_id=456"
+//   - "type_name=user" - exact match
+//   - "type_name=~user%" - pattern match (starts with "user")
+//   - "type_id=550e8400-e29b-41d4-a716-446655440000" - exact UUID match
+//   - "type_name!=admin" - not equal
+//   - "type_name!~test%" - does not start with "test"
+//   - "type_name=user&id=123" - AND operation
+//   - "type_name=user|type_name=admin" - OR operation
+//   - "(type_name=user|type_name=admin)&organization_id=456" - grouping
 func FormatFilterString(filterInput string, validKeys []string) (string, error) {
 	if filterInput == "" {
 		return "", nil

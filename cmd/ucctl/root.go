@@ -242,10 +242,11 @@ func ContextListCommand() *cobra.Command {
 func ContextUseCommand() *cobra.Command {
 	uc := context.UseCommand{}
 	return &cobra.Command{
-		Use:   "use <context-name>",
-		Short: "Switch to a context",
-		Long:  "Switch to a different UserClouds context",
-		RunE:  uc.RunE,
+		Use:               "use <context-name>",
+		Short:             "Switch to a context",
+		Long:              "Switch to a different UserClouds context",
+		RunE:              uc.RunE,
+		ValidArgsFunction: context.ValidContextArgs,
 	}
 }
 
@@ -267,16 +268,20 @@ For console tenant contexts, use the --console-tenant flag.`,
 	cmd.Flags().StringVarP(&sc.Console, "console", "", "", "Console tenant context name (required for tenant contexts)")
 	cmd.Flags().BoolVarP(&sc.IsConsoleTenant, "console-tenant", "", false, "Mark this context as a console tenant")
 
+	// Register completion function for --console flag
+	_ = cmd.RegisterFlagCompletionFunc("console", context.ValidConsoleTenantArgs)
+
 	return cmd
 }
 
 func ContextDeleteCommand() *cobra.Command {
 	dc := context.DeleteCommand{}
 	return &cobra.Command{
-		Use:   "delete <context-name>",
-		Short: "Delete a context",
-		Long:  "Delete a UserClouds context configuration",
-		RunE:  dc.RunE,
+		Use:               "delete <context-name>",
+		Short:             "Delete a context",
+		Long:              "Delete a UserClouds context configuration",
+		RunE:              dc.RunE,
+		ValidArgsFunction: context.ValidContextArgs,
 	}
 }
 

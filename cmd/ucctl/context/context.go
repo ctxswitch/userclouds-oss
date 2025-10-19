@@ -11,6 +11,52 @@ import (
 	"userclouds.com/cmd/ucctl/config"
 )
 
+// getContextNames returns a sorted list of available context names for completion
+func getContextNames() []string {
+	cfg, err := config.Load("")
+	if err != nil {
+		return []string{}
+	}
+
+	names := make([]string, 0, len(cfg.Contexts))
+	for name := range cfg.Contexts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ValidContextArgs provides dynamic completion for context names
+func ValidContextArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Only complete the first argument (context name)
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return getContextNames(), cobra.ShellCompDirectiveNoFileComp
+}
+
+// getConsoleTenantNames returns a sorted list of console tenant context names for completion
+func getConsoleTenantNames() []string {
+	cfg, err := config.Load("")
+	if err != nil {
+		return []string{}
+	}
+
+	names := make([]string, 0, len(cfg.Contexts))
+	for name, ctx := range cfg.Contexts {
+		if ctx.IsConsoleTenant {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ValidConsoleTenantArgs provides dynamic completion for console tenant names
+func ValidConsoleTenantArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return getConsoleTenantNames(), cobra.ShellCompDirectiveNoFileComp
+}
+
 // ListCommand lists all contexts
 type ListCommand struct{}
 

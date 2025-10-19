@@ -28,10 +28,12 @@ func (c *UserCommand) RunE(cmd *cobra.Command, args []string) error {
 	// Load credentials from context or flags
 	creds, err := common.LoadCredentialsFromContext(
 		
+		
 		c.URL,
 		c.ClientID,
 		c.ClientSecret,
 		c.ClientSecretVar,
+		"", // configPath - use default precedence
 	)
 	if err != nil {
 		return err

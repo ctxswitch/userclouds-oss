@@ -18,6 +18,10 @@ import (
 )
 
 const (
+	// DefaultTenantURLVar is the default environment variable for tenant URL
+	DefaultTenantURLVar = "UC_TENANT_URL"
+	// DefaultClientIDVar is the default environment variable for client ID
+	DefaultClientIDVar = "UC_CLIENT_ID"
 	// DefaultClientSecretVar is the default environment variable for client secrets
 	DefaultClientSecretVar = "UC_CLIENT_SECRET"
 	// DefaultBearerTokenVar is the default environment variable for bearer tokens
@@ -47,63 +51,82 @@ type Credentials struct {
 }
 
 // LoadCredentialsFromContext loads credentials from the current context or explicit flags
-// If no explicit credentials are provided, it automatically uses the current context
-func LoadCredentialsFromContext(url, clientID, clientSecret, clientSecretVar string) (*Credentials, error) {
-	// If no explicit credentials provided, load from config
-	if url == "" && clientID == "" && clientSecret == "" {
-		cfg, err := config.Load()
-		if err != nil {
-			return nil, fmt.Errorf("failed to load config: %w", err)
-		}
+// Precedence order (highest to lowest):
+// 1. Command-line flags (url, clientID, clientSecret parameters)
+// 2. Environment variables (UC_TENANT_URL, UC_CLIENT_ID, UC_CLIENT_SECRET)
+// 3. Current context from config file
+func LoadCredentialsFromContext(url, clientID, clientSecret, clientSecretVar, configPath string) (*Credentials, error) {
+	// Start with values from context (lowest priority)
+	contextURL := ""
+	contextClientID := ""
+	contextClientSecret := ""
 
+	cfg, err := config.Load(configPath)
+	if err == nil {
 		ctx, err := cfg.GetCurrentContext()
-		if err != nil {
-			return nil, fmt.Errorf("no current context set. Use 'ucctl context use <name>' or provide --url, --client-id, and --client-secret")
-		}
-
-		// Use current context directly
-		if url == "" {
-			url = ctx.URL
-		}
-		if clientID == "" {
-			clientID = ctx.ClientID
-		}
-		if clientSecret == "" {
-			clientSecret = ctx.ClientSecret
+		if err == nil {
+			contextURL = ctx.URL
+			contextClientID = ctx.ClientID
+			contextClientSecret = ctx.ClientSecret
 		}
 	}
 
-	if url == "" {
-		return nil, fmt.Errorf("URL is required (use --url or set a context)")
+	// Apply context values as defaults
+	finalURL := contextURL
+	finalClientID := contextClientID
+	finalClientSecret := contextClientSecret
+
+	// Override with environment variables (medium priority)
+	if envURL := os.Getenv(DefaultTenantURLVar); envURL != "" {
+		finalURL = envURL
+	}
+	if envClientID := os.Getenv(DefaultClientIDVar); envClientID != "" {
+		finalClientID = envClientID
 	}
 
-	if clientID == "" {
-		return nil, fmt.Errorf("client ID is required (use --client-id or set a context)")
+	// Override with command-line arguments (highest priority)
+	if url != "" {
+		finalURL = url
+	}
+	if clientID != "" {
+		finalClientID = clientID
+	}
+	if clientSecret != "" {
+		finalClientSecret = clientSecret
+	}
+
+	// Validate required fields
+	if finalURL == "" {
+		return nil, fmt.Errorf("URL is required (use --url, set %s env var, or set a context)", DefaultTenantURLVar)
+	}
+
+	if finalClientID == "" {
+		return nil, fmt.Errorf("client ID is required (use --client-id, set %s env var, or set a context)", DefaultClientIDVar)
 	}
 
 	// Get client secret from environment variable if not set directly
-	if clientSecret == "" {
+	if finalClientSecret == "" {
 		if clientSecretVar == "" {
 			clientSecretVar = DefaultClientSecretVar
 		}
-		clientSecret = os.Getenv(clientSecretVar)
-		if clientSecret == "" {
+		finalClientSecret = os.Getenv(clientSecretVar)
+		if finalClientSecret == "" {
 			return nil, fmt.Errorf("client secret is required (use --client-secret, set %s env var, or use a context)", clientSecretVar)
 		}
 	}
 
 	return &Credentials{
-		URL:          url,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
+		URL:          finalURL,
+		ClientID:     finalClientID,
+		ClientSecret: finalClientSecret,
 		AuthType:     AuthTypeClientCredentials,
 	}, nil
 }
 
 // LoadCredentialsFromContextName loads credentials from a named context
 // This is useful when you need to load credentials for a specific context (not the current one)
-func LoadCredentialsFromContextName(contextName string) (*Credentials, error) {
-	cfg, err := config.Load()
+func LoadCredentialsFromContextName(contextName, configPath string) (*Credentials, error) {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
@@ -237,12 +260,12 @@ func (c *Credentials) GetClientCredentials() (jsonclient.Option, error) {
 
 // OIDCLoginOptions holds options for interactive OIDC login
 type OIDCLoginOptions struct {
-	TenantURL     string   // UserClouds tenant URL
-	ClientID      string   // OAuth2 client ID
-	ClientSecret  string   // OAuth2 client secret (optional for public clients)
-	RedirectURL   string   // Redirect URL (defaults to http://localhost:8080/callback)
-	Scopes        []string // OAuth2 scopes (defaults to openid, profile, email)
-	CallbackPort  int      // Port for local callback server (defaults to 8080)
+	TenantURL     string                 // UserClouds tenant URL
+	ClientID      string                 // OAuth2 client ID
+	ClientSecret  string                 // OAuth2 client secret (optional for public clients)
+	RedirectURL   string                 // Redirect URL (defaults to http://localhost:8080/callback)
+	Scopes        []string               // OAuth2 scopes (defaults to openid, profile, email)
+	CallbackPort  int                    // Port for local callback server (defaults to 8080)
 	BrowserOpener func(url string) error // Custom browser opener (optional)
 }
 
@@ -399,4 +422,10 @@ func AddAuthFlags(cmd *cobra.Command, url, clientID, clientSecret, clientSecretV
 	cmd.Flags().StringVarP(clientSecret, "client-secret", "", "", "client secret (overrides context)")
 	cmd.Flags().StringVarP(clientSecretVar, "client-secret-var", "", DefaultClientSecretVar, "environment variable containing client secret")
 	cmd.Flags().StringVarP(authnType, "authn-type", "", "", "authentication type filter (social, password)")
+}
+
+// AddAuthFlagsWithConfigPath adds standard authentication flags including config path to a command
+func AddAuthFlagsWithConfigPath(cmd *cobra.Command, url, clientID, clientSecret, clientSecretVar, configPath *string, authnType *string) {
+	AddAuthFlags(cmd, url, clientID, clientSecret, clientSecretVar, authnType)
+	cmd.Flags().StringVarP(configPath, "uc-context", "", "", "Path to context config file")
 }

@@ -14,6 +14,10 @@ const (
 	DefaultConfigDir = ".userclouds"
 	// DefaultConfigFile is the default config file name
 	DefaultConfigFile = "config.yaml"
+	// LocalConfigFile is the local config file name
+	LocalConfigFile = ".uc-context.yaml"
+	// DefaultConfigPathVar is the default environment variable for config path
+	DefaultConfigPathVar = "UC_CONTEXT"
 )
 
 // Config represents the entire ucctl configuration
@@ -38,8 +42,28 @@ type Context struct {
 	IsConsoleTenant bool `yaml:"console_tenant,omitempty"`
 }
 
-// GetConfigPath returns the path to the config file
-func GetConfigPath() (string, error) {
+// GetConfigPath returns the path to the config file with precedence order:
+// 1. Explicit path parameter (if provided)
+// 2. UC_CONTEXT environment variable
+// 3. .uc-context.yaml in current directory
+// 4. ~/.userclouds/config.yaml (default)
+func GetConfigPath(explicitPath string) (string, error) {
+	// Highest priority: explicit path from command-line flag
+	if explicitPath != "" {
+		return explicitPath, nil
+	}
+
+	// Second priority: UC_CONTEXT environment variable
+	if envPath := os.Getenv(DefaultConfigPathVar); envPath != "" {
+		return envPath, nil
+	}
+
+	// Third priority: .uc-context.yaml in current directory
+	if _, err := os.Stat(LocalConfigFile); err == nil {
+		return LocalConfigFile, nil
+	}
+
+	// Fourth priority (default): ~/.userclouds/config.yaml
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
@@ -48,9 +72,9 @@ func GetConfigPath() (string, error) {
 	return filepath.Join(home, DefaultConfigDir, DefaultConfigFile), nil
 }
 
-// Load loads the configuration from the default location
-func Load() (*Config, error) {
-	path, err := GetConfigPath()
+// Load loads the configuration using the config path precedence order
+func Load(explicitPath string) (*Config, error) {
+	path, err := GetConfigPath(explicitPath)
 	if err != nil {
 		return nil, err
 	}
@@ -85,9 +109,9 @@ func LoadFrom(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// Save saves the configuration to the default location
-func (c *Config) Save() error {
-	path, err := GetConfigPath()
+// Save saves the configuration using the config path precedence order
+func (c *Config) Save(explicitPath string) error {
+	path, err := GetConfigPath(explicitPath)
 	if err != nil {
 		return err
 	}

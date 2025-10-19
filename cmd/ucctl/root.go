@@ -50,7 +50,9 @@ added when the user logs in for the first time via OIDC (based on email match).`
 	DeleteLong   = `Delete userclouds resources such as objects, edges, object types, and edge types`
 )
 
-type Root struct{}
+type Root struct {
+	ConfigPath string
+}
 
 func NewRoot() *Root {
 	return &Root{}
@@ -71,6 +73,9 @@ func (r *Root) Command() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
+
+	// Add persistent flag for config path
+	rootCmd.PersistentFlags().StringVar(&r.ConfigPath, "uc-context", "", "Path to context config file")
 
 	rootCmd.AddCommand(AutoProvisionCommand())
 	rootCmd.AddCommand(SyncCommand())

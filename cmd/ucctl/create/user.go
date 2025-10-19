@@ -59,11 +59,11 @@ func (c *UserCommand) validate() error {
 
 	// Load credentials from context or flags
 	creds, err := common.LoadCredentialsFromContext(
-		
 		c.URL,
 		c.ClientID,
 		c.ClientSecret,
 		c.ClientSecretVar,
+		"", // configPath - use default precedence
 	)
 	if err != nil {
 		return err

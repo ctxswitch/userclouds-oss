@@ -83,7 +83,7 @@ func (c *TenantCommand) validate() error {
 	// Load source credentials
 	if c.Source != "" {
 		// Load from named context
-		srcCreds, err := common.LoadCredentialsFromContextName(c.Source)
+		srcCreds, err := common.LoadCredentialsFromContextName(c.Source, "")
 		if err != nil {
 			return fmt.Errorf("failed to load source context: %w", err)
 		}
@@ -108,7 +108,7 @@ func (c *TenantCommand) validate() error {
 	// Load destination credentials
 	if c.Destination != "" {
 		// Load from named context
-		dstCreds, err := common.LoadCredentialsFromContextName(c.Destination)
+		dstCreds, err := common.LoadCredentialsFromContextName(c.Destination, "")
 		if err != nil {
 			return fmt.Errorf("failed to load destination context: %w", err)
 		}

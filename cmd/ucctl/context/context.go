@@ -15,7 +15,7 @@ import (
 type ListCommand struct{}
 
 func (c *ListCommand) RunE(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -62,7 +62,7 @@ func (c *UseCommand) RunE(cmd *cobra.Command, args []string) error {
 
 	contextName := args[0]
 
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -71,7 +71,7 @@ func (c *UseCommand) RunE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := cfg.Save(); err != nil {
+	if err := cfg.Save(""); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -116,7 +116,7 @@ func (c *SetCommand) RunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--console is required for regular tenant contexts (or use --console-tenant to create a console tenant)")
 	}
 
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -147,7 +147,7 @@ func (c *SetCommand) RunE(cmd *cobra.Command, args []string) error {
 		cfg.CurrentContext = contextName
 	}
 
-	if err := cfg.Save(); err != nil {
+	if err := cfg.Save(""); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -173,7 +173,7 @@ func (c *DeleteCommand) RunE(cmd *cobra.Command, args []string) error {
 
 	contextName := args[0]
 
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -182,7 +182,7 @@ func (c *DeleteCommand) RunE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := cfg.Save(); err != nil {
+	if err := cfg.Save(""); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -194,7 +194,7 @@ func (c *DeleteCommand) RunE(cmd *cobra.Command, args []string) error {
 type ShowCommand struct{}
 
 func (c *ShowCommand) RunE(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}

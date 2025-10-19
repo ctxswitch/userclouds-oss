@@ -47,9 +47,9 @@ ucctl ctx list
 **Example output:**
 ```
 CURRENT   NAME            TYPE      URL
-*         console-prod    console   https://console.userclouds.com
-          tenant-foo      tenant    https://foo.userclouds.com
-          tenant-bar      tenant    https://bar.userclouds.com
+*         console-prod    console   https://console.tenant.example.com
+          tenant-foo      tenant    https://foo.tenant.example.com
+          tenant-bar      tenant    https://bar.tenant.example.com
 ```
 
 ##### `ucctl context set <context-name>`
@@ -67,7 +67,7 @@ Create or update a context configuration.
 
 ```bash
 ucctl context set console-prod \
-  --url https://console.userclouds.com \
+  --url https://console.tenant.example.com \
   --client-id console-client \
   --client-secret console-secret \
   --console-tenant
@@ -77,13 +77,13 @@ ucctl context set console-prod \
 
 ```bash
 ucctl context set tenant-foo \
-  --url https://foo.userclouds.com \
+  --url https://foo.tenant.example.com \
   --client-id foo-client \
   --client-secret foo-secret \
   --console console-prod
 
 ucctl ctx set tenant-bar \
-  --url https://bar.userclouds.com \
+  --url https://bar.tenant.example.com \
   --client-id bar-client \
   --client-secret bar-secret \
   --console console-prod
@@ -119,11 +119,11 @@ ucctl context show
 ```
 Current context: tenant-foo
 Type: Tenant
-URL: https://foo.userclouds.com
+URL: https://foo.tenant.example.com
 Client ID: foo-client
 Client Secret: ****cret
 Console Tenant: console-prod
-  Console URL: https://console.userclouds.com
+  Console URL: https://console.tenant.example.com
   Console Client ID: console-client
 ```
 
@@ -131,7 +131,7 @@ Console Tenant: console-prod
 ```
 Current context: console-prod
 Type: Console Tenant
-URL: https://console.userclouds.com
+URL: https://console.tenant.example.com
 Client ID: console-client
 Client Secret: ****cret
 ```
@@ -254,7 +254,7 @@ If you don't want to use contexts, you can specify connection details explicitly
 
 ```bash
 ucctl create user \
-  --url http://localhost:8080 \
+  --url https://console.tenant.example.com \
   --client-id my-client \
   --client-secret my-secret \
   --username jane.smith \
@@ -272,38 +272,6 @@ ucctl create user \
 - The `--admin` flag will grant admin privileges on the tenant/company after user creation
 
 ---
-
-### Filter Query Language
-
-The `get` commands support two types of filtering: simplified boolean expressions (via `--filter`) and raw filter queries (via `--raw-filter`).
-
-#### Simplified Filter Syntax (`--filter`)
-
-The `--filter` flag provides a user-friendly syntax for common filtering needs:
-
-**Operators:**
-- `&` - AND operator (e.g., `type_name=user&id=123`)
-- `|` - OR operator (e.g., `type_name=user|type_name=admin`)
-- `()` - Grouping (e.g., `(type_name=user|type_name=admin)&organization_id=456`)
-
-**Wildcards:**
-- `%` - Matches any number of characters (SQL LIKE)
-- Works with any string field (e.g., `type_name=user%` matches "user", "user_admin", etc.)
-
-**Examples:**
-```bash
-# Simple filter
---filter "type_name=user"
-
-# AND operation
---filter "type_name=user&organization_id=123"
-
-# OR operation
---filter "type_name=user|type_name=admin"
-
-# Grouping with wildcards
---filter "(type_name=user%|type_name=admin)&organization_id=456"
-```
 
 ### Get Commands
 
@@ -337,7 +305,8 @@ List all AuthZ object types with pagination and filtering support.
 List all object types with interactive paging:
 ```bash
 ucctl ctx use tenant-foo
-ucctl get objecttypes```
+ucctl get objecttypes
+```
 
 List all object types without paging (print all at once):
 ```bash
@@ -382,7 +351,7 @@ ucctl get objecttypes --raw-filter "(('type_name',LK,'user%'),OR,('type_name',EQ
 Using explicit connection flags:
 ```bash
 ucctl get objecttypes \
-  --url https://foo.userclouds.com \
+  --url https://foo.tenant.example.com \
   --client-id my-client \
   --client-secret my-secret \
   --filter "type_name=document"
@@ -418,7 +387,8 @@ Get detailed information about a specific AuthZ object type by its ID.
 
 ```bash
 ucctl ctx use tenant-foo
-ucctl get objecttype 550e8400-e29b-41d4-a716-446655440000```
+ucctl get objecttype 550e8400-e29b-41d4-a716-446655440000
+```
 
 #### `ucctl get objects`
 
@@ -473,7 +443,8 @@ Get detailed information about a specific AuthZ object by its ID.
 **Examples:**
 
 ```bash
-ucctl get object 550e8400-e29b-41d4-a716-446655440000```
+ucctl get object 550e8400-e29b-41d4-a716-446655440000
+```
 
 #### `ucctl get edgetypes`
 
@@ -528,7 +499,8 @@ Get detailed information about a specific AuthZ edge type by its ID.
 **Examples:**
 
 ```bash
-ucctl get edgetype 550e8400-e29b-41d4-a716-446655440000```
+ucctl get edgetype 550e8400-e29b-41d4-a716-446655440000
+```
 
 #### `ucctl get edges`
 
@@ -580,9 +552,42 @@ Get detailed information about a specific AuthZ edge by its ID.
 **Examples:**
 
 ```bash
-ucctl get edge 550e8400-e29b-41d4-a716-446655440000```
+ucctl get edge 550e8400-e29b-41d4-a716-446655440000
+```
 
 ---
+
+### Filter Query Language
+
+The `get` commands support two types of filtering: simplified boolean expressions (via `--filter`) and raw filter queries (via `--raw-filter`).
+
+#### Simplified Filter Syntax (`--filter`)
+
+The `--filter` flag provides a user-friendly syntax for common filtering needs:
+
+**Operators:**
+- `&` - AND operator (e.g., `type_name=user&id=123`)
+- `|` - OR operator (e.g., `type_name=user|type_name=admin`)
+- `()` - Grouping (e.g., `(type_name=user|type_name=admin)&organization_id=456`)
+
+**Wildcards:**
+- `%` - Matches any number of characters (SQL LIKE)
+- Works with any string field (e.g., `type_name=user%` matches "user", "user_admin", etc.)
+
+**Examples:**
+```bash
+# Simple filter
+--filter "type_name=user"
+
+# AND operation
+--filter "type_name=user&organization_id=123"
+
+# OR operation
+--filter "type_name=user|type_name=admin"
+
+# Grouping with wildcards
+--filter "(type_name=user%|type_name=admin)&organization_id=456"
+```
 
 #### Raw Filter Query Format (`--raw-filter`)
 
@@ -591,20 +596,26 @@ The `--raw-filter` flag provides direct access to the full pagination filter que
 **Query Types:**
 
 1. **LEAF Query** - A single comparison:
-   ```
+   
+```
    ('KEY',OPERATOR,'VALUE')
-   ```
+   
+```
 
 2. **NESTED Query** - A grouped query:
-   ```
+   
+```
    (FILTER_QUERY)
-   ```
+   
+```
 
 3. **COMPOSITE Query** - Multiple queries combined with logical operators:
-   ```
+   
+```
    (FILTER_QUERY,LOGICAL_OP,FILTER_QUERY)
    (FILTER_QUERY,LOGICAL_OP,FILTER_QUERY,LOGICAL_OP,FILTER_QUERY)
-   ```
+   
+```
 
 **Operators:**
 
@@ -709,7 +720,8 @@ Delete an AuthZ object by its ID.
 
 ```bash
 ucctl ctx use tenant-foo
-ucctl delete object 550e8400-e29b-41d4-a716-446655440000```
+ucctl delete object 550e8400-e29b-41d4-a716-446655440000
+```
 
 #### `ucctl delete objecttype <id>`
 
@@ -724,7 +736,8 @@ Delete an AuthZ object type by its ID.
 **Examples:**
 
 ```bash
-ucctl delete objecttype 550e8400-e29b-41d4-a716-446655440000```
+ucctl delete objecttype 550e8400-e29b-41d4-a716-446655440000
+```
 
 **Note:** Cannot delete object types that have existing objects. Delete all objects first.
 
@@ -741,7 +754,8 @@ Delete an AuthZ edge by its ID.
 **Examples:**
 
 ```bash
-ucctl delete edge 550e8400-e29b-41d4-a716-446655440000```
+ucctl delete edge 550e8400-e29b-41d4-a716-446655440000
+```
 
 #### `ucctl delete edgetype <id>`
 
@@ -756,7 +770,8 @@ Delete an AuthZ edge type by its ID.
 **Examples:**
 
 ```bash
-ucctl delete edgetype 550e8400-e29b-41d4-a716-446655440000```
+ucctl delete edgetype 550e8400-e29b-41d4-a716-446655440000
+```
 
 **Note:** Cannot delete edge types that have existing edges. Delete all edges of this type first.
 
@@ -789,11 +804,13 @@ Update an AuthZ object's alias field by its ID.
 Set an alias:
 ```bash
 ucctl ctx use tenant-foo
-ucctl set object 550e8400-e29b-41d4-a716-446655440000 --alias "user-admin"```
+ucctl set object 550e8400-e29b-41d4-a716-446655440000 --alias "user-admin"
+```
 
 Clear an alias:
 ```bash
-ucctl set object 550e8400-e29b-41d4-a716-446655440000 --clear-alias```
+ucctl set object 550e8400-e29b-41d4-a716-446655440000 --clear-alias
+```
 
 **Notes:**
 - Only the alias field can be updated on objects
@@ -827,7 +844,8 @@ ucctl set edgetype 550e8400-e29b-41d4-a716-446655440000 \
   --type-name "member" \
   --source-object-type-id 660e8400-e29b-41d4-a716-446655440001 \
   --target-object-type-id 770e8400-e29b-41d4-a716-446655440002 \
- ```
+ 
+```
 
 Update edge type with attributes:
 ```bash
@@ -836,7 +854,8 @@ ucctl set edgetype 550e8400-e29b-41d4-a716-446655440000 \
   --source-object-type-id 660e8400-e29b-41d4-a716-446655440001 \
   --target-object-type-id 770e8400-e29b-41d4-a716-446655440002 \
   --attributes '{"role":"admin","permissions":["read","write"]}' \
- ```
+ 
+```
 
 **Notes:**
 - All edge type fields are updatable
@@ -905,7 +924,7 @@ ucctl set admin \
 
 ```bash
 ucctl set admin \
-  --url https://foo.userclouds.com \
+  --url https://foo.tenant.example.com \
   --client-id my-client \
   --client-secret my-secret \
   --email user@example.com \
@@ -951,8 +970,8 @@ Sync authorization resources from a source tenant to a destination tenant. This 
 Sync using contexts (recommended):
 ```bash
 # Set up contexts once
-ucctl ctx set staging --url https://staging.userclouds.com --client-id staging-client --client-secret staging-secret
-ucctl ctx set prod --url https://prod.userclouds.com --client-id prod-client --client-secret prod-secret
+ucctl ctx set staging --url https://staging.tenant.example.com --client-id staging-client --client-secret staging-secret
+ucctl ctx set prod --url https://prod.tenant.example.com --client-id prod-client --client-secret prod-secret
 
 # Sync from staging to prod (dry run)
 ucctl sync tenant --source staging --destination prod --dry-run
@@ -967,9 +986,9 @@ export UC_CLIENT_SECRET=staging-secret
 export UC_DEST_SECRET=prod-secret
 
 ucctl sync tenant \
-  --source-url https://staging.userclouds.com \
+  --source-url https://staging.tenant.example.com \
   --source-client-id staging-client \
-  --destination-url https://prod.userclouds.com \
+  --destination-url https://prod.tenant.example.com \
   --destination-client-id prod-client \
   --destination-client-secret-var UC_DEST_SECRET \
   --dry-run
@@ -1030,17 +1049,17 @@ Context configurations are stored in:
 current_context: console-prod
 contexts:
   console-prod:
-    url: https://console.userclouds.com
+    url: https://console.tenant.example.com
     client_id: console-client
     client_secret: console-secret
     console_tenant: true
   tenant-foo:
-    url: https://foo.userclouds.com
+    url: https://foo.tenant.example.com
     client_id: foo-client
     client_secret: foo-secret
     console: console-prod
   tenant-bar:
-    url: https://bar.userclouds.com
+    url: https://bar.tenant.example.com
     client_id: bar-client
     client_secret: bar-secret
     console: console-prod
@@ -1071,20 +1090,20 @@ contexts:
 ```bash
 # First, create the console tenant context
 ucctl ctx set console-prod \
-  --url https://console.userclouds.com \
+  --url https://console.tenant.example.com \
   --client-id console-client \
   --client-secret console-secret \
   --console-tenant
 
 # Create tenant contexts that reference the console
 ucctl ctx set tenant-foo \
-  --url https://foo.userclouds.com \
+  --url https://foo.tenant.example.com \
   --client-id foo-client \
   --client-secret foo-secret \
   --console console-prod
 
 ucctl ctx set tenant-bar \
-  --url https://bar.userclouds.com \
+  --url https://bar.tenant.example.com \
   --client-id bar-client \
   --client-secret bar-secret \
   --console console-prod
@@ -1140,8 +1159,8 @@ ucctl set admin \
 
 ```bash
 # Using contexts (recommended)
-ucctl ctx set staging --url https://staging.userclouds.com --client-id staging-client --client-secret staging-secret
-ucctl ctx set local --url https://local.userclouds.com --client-id local-client --client-secret local-secret
+ucctl ctx set staging --url https://staging.tenant.example.com --client-id staging-client --client-secret staging-secret
+ucctl ctx set local --url https://local.tenant.example.com --client-id local-client --client-secret local-secret
 
 # Dry run: preview what would change
 ucctl sync tenant --source staging --destination local --dry-run --verbose
@@ -1153,9 +1172,9 @@ ucctl sync tenant --source staging --destination local
 export UC_CLIENT_SECRET=staging-secret
 export UC_DEST_SECRET=local-secret
 ucctl sync tenant \
-  --source-url https://staging.userclouds.com \
+  --source-url https://staging.tenant.example.com \
   --source-client-id staging-client \
-  --destination-url https://local.userclouds.com \
+  --destination-url https://local.tenant.example.com \
   --destination-client-id local-client \
   --destination-client-secret-var UC_DEST_SECRET \
   --dry-run
@@ -1192,14 +1211,14 @@ This occurs when no context is configured or active. Fix it by:
 ```bash
 # Create a console tenant context
 ucctl ctx set console-prod \
-  --url https://console.userclouds.com \
+  --url https://console.tenant.example.com \
   --client-id console-client \
   --client-secret console-secret \
   --console-tenant
 
 # Or create a tenant context (requires a console tenant context first)
 ucctl ctx set tenant-foo \
-  --url https://foo.userclouds.com \
+  --url https://foo.tenant.example.com \
   --client-id foo-client \
   --client-secret foo-secret \
   --console console-prod
@@ -1248,17 +1267,6 @@ go build -o ucctl ./cmd/ucctl
 ```bash
 go test ./cmd/ucctl/...
 ```
-
----
-
-## Future Enhancements
-
-- Support for more resource types in `synctenant` (tokenizer, userstore, authn, logserver)
-- Encrypted storage for client secrets in config file
-- Support for token refresh and session management
-- Additional user management commands (update, delete, list)
-- Organization management commands
-- Batch operations support
 
 ---
 

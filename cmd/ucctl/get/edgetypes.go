@@ -3,10 +3,8 @@ package get
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 	"userclouds.com/authz"
 	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/infra/pagination"
@@ -69,26 +67,18 @@ func (c *EdgeTypesCommand) RunE(cmd *cobra.Command, args []string) error {
 		return c.outputFormatted(cmd.Context(), azClient)
 	}
 
-	// Check if we should use the pager
-	usePager := !c.NoPager && term.IsTerminal(int(os.Stdout.Fd()))
-
 	config := common.PagerConfig[authz.EdgeType]{
 		Ctx: cmd.Context(),
 		FetchFunc: func(ctx context.Context, cursor string, limit int) ([]authz.EdgeType, string, error) {
 			return c.fetchEdgeTypes(ctx, azClient, cursor, limit)
 		},
-		DisplayFunc:          c.displayWithHeader,
-		DisplayWithoutHeader: c.displayWithoutHeader,
-		InitialCursor:        c.Cursor,
-		NoItemsMessage:       "No edge types found.",
-		ItemName:             "edge types",
+		TableRenderFunc: c.renderTable,
+		InitialCursor:   c.Cursor,
+		NoItemsMessage:  "No edge types found.",
+		ItemName:        "edge types",
 	}
 
-	if usePager {
-		return common.RunInteractivePager(config)
-	}
-
-	return common.RunNonInteractivePager(config)
+	return common.RunPager(config)
 }
 
 func (c *EdgeTypesCommand) outputFormatted(ctx context.Context, azClient *authz.Client) error {
@@ -195,27 +185,20 @@ func (c *EdgeTypesCommand) fetchEdgeTypes(ctx context.Context, azClient *authz.C
 	return resp.Data, nextCursor, nil
 }
 
-func (c *EdgeTypesCommand) displayWithHeader(edgeTypes []authz.EdgeType) {
-	display := common.NewTabularDisplay()
-	display.WriteHeader("ID", "TYPE_NAME", "SOURCE_TYPE_ID", "TARGET_TYPE_ID", "ORGANIZATION_ID", "CREATED", "UPDATED")
-	for _, et := range edgeTypes {
-		display.WriteRow(
-			et.ID.String(),
-			et.TypeName,
-			et.SourceObjectTypeID.String(),
-			et.TargetObjectTypeID.String(),
-			et.OrganizationID.String(),
-			et.Created.Format("2006-01-02 15:04:05"),
-			et.Updated.Format("2006-01-02 15:04:05"),
-		)
+func (c *EdgeTypesCommand) renderTable(edgeTypes []authz.EdgeType) ([]common.TableColumn, []common.TableRow) {
+	columns := []common.TableColumn{
+		{Header: "ID", Width: 36},                // UUIDs are always 36 characters
+		{Header: "TYPE_NAME", Width: 0},          // Dynamic width for type names
+		{Header: "SOURCE_TYPE_ID", Width: 36},    // UUIDs are always 36 characters
+		{Header: "TARGET_TYPE_ID", Width: 36},    // UUIDs are always 36 characters
+		{Header: "ORGANIZATION_ID", Width: 36},   // UUIDs are always 36 characters
+		{Header: "CREATED", Width: 19},           // "2006-01-02 15:04:05" is 19 characters
+		{Header: "UPDATED", Width: 19},           // "2006-01-02 15:04:05" is 19 characters
 	}
-	display.Flush()
-}
 
-func (c *EdgeTypesCommand) displayWithoutHeader(edgeTypes []authz.EdgeType) {
-	display := common.NewTabularDisplay()
-	for _, et := range edgeTypes {
-		display.WriteRow(
+	rows := make([]common.TableRow, len(edgeTypes))
+	for i, et := range edgeTypes {
+		rows[i] = common.TableRow{
 			et.ID.String(),
 			et.TypeName,
 			et.SourceObjectTypeID.String(),
@@ -223,7 +206,8 @@ func (c *EdgeTypesCommand) displayWithoutHeader(edgeTypes []authz.EdgeType) {
 			et.OrganizationID.String(),
 			et.Created.Format("2006-01-02 15:04:05"),
 			et.Updated.Format("2006-01-02 15:04:05"),
-		)
+		}
 	}
-	display.Flush()
+
+	return columns, rows
 }

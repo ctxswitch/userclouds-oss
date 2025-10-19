@@ -3,10 +3,8 @@ package get
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 	"userclouds.com/authz"
 	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/infra/pagination"
@@ -69,26 +67,18 @@ func (c *ObjectTypesCommand) RunE(cmd *cobra.Command, args []string) error {
 		return c.outputFormatted(cmd.Context(), azClient)
 	}
 
-	// Check if we should use the pager
-	usePager := !c.NoPager && term.IsTerminal(int(os.Stdout.Fd()))
-
 	config := common.PagerConfig[authz.ObjectType]{
 		Ctx: cmd.Context(),
 		FetchFunc: func(ctx context.Context, cursor string, limit int) ([]authz.ObjectType, string, error) {
 			return c.fetchObjectTypes(ctx, azClient, cursor, limit)
 		},
-		DisplayFunc:          c.displayWithHeader,
-		DisplayWithoutHeader: c.displayWithoutHeader,
-		InitialCursor:        c.Cursor,
-		NoItemsMessage:       "No object types found.",
-		ItemName:             "object types",
+		TableRenderFunc: c.renderObjectTypesTable,
+		InitialCursor:   c.Cursor,
+		NoItemsMessage:  "No object types found.",
+		ItemName:        "object types",
 	}
 
-	if usePager {
-		return common.RunInteractivePager(config)
-	}
-
-	return common.RunNonInteractivePager(config)
+	return common.RunPager(config)
 }
 
 func (c *ObjectTypesCommand) outputFormatted(ctx context.Context, azClient *authz.Client) error {
@@ -195,29 +185,23 @@ func (c *ObjectTypesCommand) fetchObjectTypes(ctx context.Context, azClient *aut
 	return resp.Data, nextCursor, nil
 }
 
-func (c *ObjectTypesCommand) displayWithHeader(objectTypes []authz.ObjectType) {
-	display := common.NewTabularDisplay()
-	display.WriteHeader("ID", "TYPE_NAME", "CREATED", "UPDATED")
-	for _, ot := range objectTypes {
-		display.WriteRow(
-			ot.ID.String(),
-			ot.TypeName,
-			ot.Created.Format("2006-01-02 15:04:05"),
-			ot.Updated.Format("2006-01-02 15:04:05"),
-		)
+func (c *ObjectTypesCommand) renderObjectTypesTable(objectTypes []authz.ObjectType) ([]common.TableColumn, []common.TableRow) {
+	columns := []common.TableColumn{
+		{Header: "ID", Width: 36},        // UUIDs are always 36 characters (fixed)
+		{Header: "TYPE_NAME", Width: 0},  // Dynamic width based on content
+		{Header: "CREATED", Width: 19},   // "2006-01-02 15:04:05" is 19 characters (fixed)
+		{Header: "UPDATED", Width: 19},   // "2006-01-02 15:04:05" is 19 characters (fixed)
 	}
-	display.Flush()
-}
 
-func (c *ObjectTypesCommand) displayWithoutHeader(objectTypes []authz.ObjectType) {
-	display := common.NewTabularDisplay()
-	for _, ot := range objectTypes {
-		display.WriteRow(
+	rows := make([]common.TableRow, len(objectTypes))
+	for i, ot := range objectTypes {
+		rows[i] = common.TableRow{
 			ot.ID.String(),
 			ot.TypeName,
 			ot.Created.Format("2006-01-02 15:04:05"),
 			ot.Updated.Format("2006-01-02 15:04:05"),
-		)
+		}
 	}
-	display.Flush()
+
+	return columns, rows
 }

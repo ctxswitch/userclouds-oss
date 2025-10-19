@@ -3,10 +3,8 @@ package get
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 	"userclouds.com/authz"
 	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/infra/pagination"
@@ -69,26 +67,18 @@ func (c *ObjectsCommand) RunE(cmd *cobra.Command, args []string) error {
 		return c.outputFormatted(cmd.Context(), azClient)
 	}
 
-	// Check if we should use the pager
-	usePager := !c.NoPager && term.IsTerminal(int(os.Stdout.Fd()))
-
 	config := common.PagerConfig[authz.Object]{
 		Ctx: cmd.Context(),
 		FetchFunc: func(ctx context.Context, cursor string, limit int) ([]authz.Object, string, error) {
 			return c.fetchObjects(ctx, azClient, cursor, limit)
 		},
-		DisplayFunc:          c.displayWithHeader,
-		DisplayWithoutHeader: c.displayWithoutHeader,
-		InitialCursor:        c.Cursor,
-		NoItemsMessage:       "No objects found.",
-		ItemName:             "objects",
+		TableRenderFunc: c.renderTable,
+		InitialCursor:   c.Cursor,
+		NoItemsMessage:  "No objects found.",
+		ItemName:        "objects",
 	}
 
-	if usePager {
-		return common.RunInteractivePager(config)
-	}
-
-	return common.RunNonInteractivePager(config)
+	return common.RunPager(config)
 }
 
 func (c *ObjectsCommand) outputFormatted(ctx context.Context, azClient *authz.Client) error {
@@ -195,41 +185,31 @@ func (c *ObjectsCommand) fetchObjects(ctx context.Context, azClient *authz.Clien
 	return resp.Data, nextCursor, nil
 }
 
-func (c *ObjectsCommand) displayWithHeader(objects []authz.Object) {
-	display := common.NewTabularDisplay()
-	display.WriteHeader("ID", "ALIAS", "TYPE_ID", "ORGANIZATION_ID", "CREATED", "UPDATED")
-	for _, obj := range objects {
-		var alias string
-		if obj.Alias != nil {
-			alias = *obj.Alias
-		}
-		display.WriteRow(
-			obj.ID.String(),
-			alias,
-			obj.TypeID.String(),
-			obj.OrganizationID.String(),
-			obj.Created.Format("2006-01-02 15:04:05"),
-			obj.Updated.Format("2006-01-02 15:04:05"),
-		)
+func (c *ObjectsCommand) renderTable(objects []authz.Object) ([]common.TableColumn, []common.TableRow) {
+	columns := []common.TableColumn{
+		{Header: "ID", Width: 36},                // UUIDs are always 36 characters
+		{Header: "ALIAS", Width: 0},              // Dynamic width for aliases
+		{Header: "TYPE_ID", Width: 36},           // UUIDs are always 36 characters
+		{Header: "ORGANIZATION_ID", Width: 36},   // UUIDs are always 36 characters
+		{Header: "CREATED", Width: 19},           // "2006-01-02 15:04:05" is 19 characters
+		{Header: "UPDATED", Width: 19},           // "2006-01-02 15:04:05" is 19 characters
 	}
-	display.Flush()
-}
 
-func (c *ObjectsCommand) displayWithoutHeader(objects []authz.Object) {
-	display := common.NewTabularDisplay()
-	for _, obj := range objects {
+	rows := make([]common.TableRow, len(objects))
+	for i, obj := range objects {
 		var alias string
 		if obj.Alias != nil {
 			alias = *obj.Alias
 		}
-		display.WriteRow(
+		rows[i] = common.TableRow{
 			obj.ID.String(),
 			alias,
 			obj.TypeID.String(),
 			obj.OrganizationID.String(),
 			obj.Created.Format("2006-01-02 15:04:05"),
 			obj.Updated.Format("2006-01-02 15:04:05"),
-		)
+		}
 	}
-	display.Flush()
+
+	return columns, rows
 }

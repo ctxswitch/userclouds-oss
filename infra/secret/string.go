@@ -100,7 +100,7 @@ func (s *String) Resolve(ctx context.Context) (string, error) {
 		return "", ucerr.Wrap(err)
 	}
 
-	value, err := pv.Get(ctx, px.Value(s.location))
+	value, err := pv.Get(ctx, px.ValueWithParams(s.location))
 	if err != nil {
 		return "", ucerr.Wrap(err)
 	}
@@ -158,7 +158,7 @@ func (s *String) Delete(ctx context.Context) error {
 		return ucerr.Wrap(err)
 	}
 
-	err = pv.Delete(ctx, px.Value(s.location))
+	err = pv.Delete(ctx, px.ValueWithParams(s.location))
 	if err != nil {
 		return ucerr.Wrap(err)
 	}

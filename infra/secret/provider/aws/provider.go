@@ -7,13 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 
 	"userclouds.com/infra/namespace/universe"
-	"userclouds.com/infra/secret/prefix"
 	"userclouds.com/infra/ucaws"
 	"userclouds.com/infra/ucerr"
 	"userclouds.com/infra/uclog"
@@ -85,7 +85,6 @@ func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	if err != nil {
 		return "", ucerr.Errorf("failed to load AWS secret '%s' from '%s': %w", cleanPath, p.region, err)
 	}
-	uclog.Debugf(ctx, "Loaded AWS secret '%s' from '%s'", cleanPath, p.region)
 	value, err := decodeSecret(result)
 
 	// decode AWS's JSON wrapper if necessary
@@ -229,10 +228,21 @@ func getTagsForSecret() []types.Tag {
 // extractAndSetParams extracts query parameters from the path
 // and sets them on the provider, then returns the clean path without query params.
 // Example: "my-secret?profile=production&region=us-east-1" -> sets p.profile="production", p.region="us-east-1", returns "my-secret"
-// Note: Assumes the secret has already been validated via Validate()
+// Note: Path should already have the prefix stripped (via ValueWithParams) before being passed here
 func (p *Provider) extractAndSetParams(path string) string {
-	px := prefix.PrefixAWS
-	cleanPath, params, err := px.ParseParams(px.String() + path)
+	// Check if there are query parameters
+	idx := strings.Index(path, "?")
+	if idx == -1 {
+		// No query parameters, return as-is
+		return path
+	}
+
+	// Split path and query string
+	cleanPath := path[:idx]
+	queryString := path[idx+1:]
+
+	// Parse query parameters
+	params, err := url.ParseQuery(queryString)
 	if err != nil {
 		// If parsing fails, just return the original path
 		return path

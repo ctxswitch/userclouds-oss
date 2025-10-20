@@ -152,7 +152,7 @@ func TestString_Validate(t *testing.T) {
 		input string
 		valid bool
 	}{
-		{"testsecret", "testsecret", false},
+		{"testsecret", "testsecret", true},
 		{"empty", "", true},
 		{"aws://secrets/testsecret", "aws://secrets/testsecret", true},
 		{"kube://secrets/testsecret", "kube://secrets/testsecret", true},

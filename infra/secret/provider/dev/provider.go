@@ -3,6 +3,7 @@ package dev
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 
 	"userclouds.com/infra/ucerr"
 )
@@ -49,7 +50,7 @@ func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	if p.decode {
 		bs, err := base64.StdEncoding.DecodeString(secret)
 		if err != nil {
-			return "", ucerr.Wrap(err)
+			return "", ucerr.Wrap(fmt.Errorf("base64 decoding failed (%s): %w", path, err))
 		}
 
 		secret = string(bs)

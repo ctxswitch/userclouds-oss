@@ -180,6 +180,7 @@ test: ## Run backend (Go) tests only
 	UC_UNIVERSE=$(TESTENV) \
 	UC_REGION=mars \
 	UC_TESTDB_POINTER_PATH=$(_TEMPFILE) \
+	UC_SECRET_MANAGER=dev-literal \
 	go test \
 		-race \
 		-coverprofile=cover.out \

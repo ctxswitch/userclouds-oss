@@ -24,7 +24,7 @@ func TestKubernetes_pathToSecretName(t *testing.T) {
 		},
 		{"token path",
 			"cross_service_auth_token/161a09be-5c61-4c76-a084-bcfe9b4968c2",
-			"cross_service_auth_token.161a09be-5c61-4c76-a084-bcfe9b4968c2",
+			"cross-service-auth-token.161a09be-5c61-4c76-a084-bcfe9b4968c2",
 		},
 	}
 

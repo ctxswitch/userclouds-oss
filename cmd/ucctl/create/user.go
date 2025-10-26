@@ -3,9 +3,10 @@ package create
 import (
 	"context"
 	"fmt"
+	"os"
+	"text/tabwriter"
 
 	"github.com/gofrs/uuid"
-	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 
 	"userclouds.com/cmd/ucctl/common"
@@ -94,19 +95,15 @@ func (c *UserCommand) validate() error {
 }
 
 func (c *UserCommand) createUser(ctx context.Context) error {
-	spinner, _ := pterm.DefaultSpinner.Start("Initializing...")
-
 	// Create client credentials option
 	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
-		spinner.Fail("Failed to create client credentials")
 		return fmt.Errorf("failed to create client credentials: %w", err)
 	}
 
 	// Create IDP management client
 	mgmtClient, err := idp.NewManagementClient(c.credentials.URL, credOpt)
 	if err != nil {
-		spinner.Fail("Failed to create IDP client")
 		return fmt.Errorf("failed to create IDP client: %w", err)
 	}
 
@@ -118,70 +115,60 @@ func (c *UserCommand) createUser(ctx context.Context) error {
 	if c.Name != "" {
 		profile["name"] = c.Name
 	}
+	// Mark email as verified by default
+	profile["email_verified"] = true
 
 	var opts []idp.Option
 	orgID, err := uuid.FromString(c.OrganizationID)
 	if err != nil {
-		spinner.Fail("Invalid organization ID")
 		return fmt.Errorf("invalid organization ID: %w", err)
 	}
 	opts = append(opts, idp.OrganizationID(orgID))
 
 	var userID uuid.UUID
+	var authnType string
+	var provider string
 
 	// Create user with appropriate authn method (or without authn)
 	if c.Username != "" && c.Password != "" {
-		spinner.UpdateText("Creating user with password authentication...")
 		userID, err = mgmtClient.CreateUserWithPassword(ctx, c.Username, c.Password, profile, opts...)
 		if err != nil {
-			spinner.Fail("Failed to create user with password")
 			return fmt.Errorf("failed to create user with password: %w", err)
 		}
+		authnType = "password"
+		provider = ""
 	} else if c.OIDCProvider != "" {
-		var provider oidc.ProviderType
-		if err := provider.UnmarshalText([]byte(c.OIDCProvider)); err != nil {
-			spinner.Fail("Invalid OIDC provider")
+		var providerType oidc.ProviderType
+		if err := providerType.UnmarshalText([]byte(c.OIDCProvider)); err != nil {
 			return fmt.Errorf("invalid OIDC provider: %w", err)
 		}
 
-		spinner.UpdateText("Creating user with OIDC authentication...")
-		userID, err = mgmtClient.CreateUserWithOIDC(ctx, provider, c.OIDCIssuerURL, c.OIDCSubject, profile, opts...)
+		userID, err = mgmtClient.CreateUserWithOIDC(ctx, providerType, c.OIDCIssuerURL, c.OIDCSubject, profile, opts...)
 		if err != nil {
-			spinner.Fail("Failed to create user with OIDC")
 			return fmt.Errorf("failed to create user with OIDC: %w", err)
 		}
+		authnType = "oidc"
+		provider = c.OIDCProvider
 	} else {
-		spinner.UpdateText("Creating user without authentication...")
 		userID, err = mgmtClient.CreateUser(ctx, profile, opts...)
 		if err != nil {
-			spinner.Fail("Failed to create user")
 			return fmt.Errorf("failed to create user: %w", err)
 		}
+		authnType = ""
+		provider = ""
 	}
 
-	spinner.Success("User created successfully")
+	// Display user in table format (same as get user)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "ID\tNAME\tEMAIL\tORGANIZATION\tVERIFIED\tAUTHN TYPE\tPROVIDER")
+	fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%t\t%s\t%s\n",
+		userID.String(),
+		c.Name,
+		c.Email,
+		c.OrganizationID,
+		true, // email_verified is always true for newly created users
+		authnType,
+		provider)
 
-	if c.Verbose {
-		pterm.Println()
-		pterm.DefaultBox.WithTitle("User Created").WithTitleTopCenter().Println(
-			pterm.Sprintf("User ID: %s\nEmail: %s\nName: %s",
-				pterm.LightCyan(userID.String()),
-				pterm.LightCyan(c.Email),
-				pterm.LightCyan(c.Name)),
-		)
-	}
-
-	// TODO: Allow for other policies.
-	if c.Admin {
-		err := c.setAdmin(ctx, userID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *UserCommand) setAdmin(ctx context.Context, id uuid.UUID) error {
-	return nil
+	return w.Flush()
 }

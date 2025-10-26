@@ -136,9 +136,6 @@ func (c *TenantCommand) validate() error {
 func (c *TenantCommand) sync(ctx context.Context) error {
 	startTime := time.Now().UTC()
 
-	pterm.DefaultHeader.WithFullWidth().Println("Tenant Sync")
-	pterm.Println()
-
 	// Fetch source resources
 	spinner, _ := pterm.DefaultSpinner.Start("Fetching resources from source: " + c.sourceCredentials.URL)
 	srcCredOpt, err := c.sourceCredentials.GetClientCredentials()
@@ -307,7 +304,13 @@ func (r *resources) insert(ctx context.Context, azc *authz.Client, verbose bool)
 				alias = *o.Alias
 			}
 
-			if _, err := azc.CreateObject(ctx, o.ID, o.TypeID, alias); err != nil {
+			// Pass organization ID from source object to preserve it in destination
+			var opts []authz.Option
+			if !o.OrganizationID.IsNil() {
+				opts = append(opts, authz.OrganizationID(o.OrganizationID))
+			}
+
+			if _, err := azc.CreateObject(ctx, o.ID, o.TypeID, alias, opts...); err != nil {
 				spinner.Fail(fmt.Sprintf("Failed to insert object: %s", o.ID.String()))
 				return fmt.Errorf("failed to create object %s: %w", o.ID.String(), err)
 			}
@@ -321,7 +324,14 @@ func (r *resources) insert(ctx context.Context, azc *authz.Client, verbose bool)
 			if verbose {
 				spinner.UpdateText(fmt.Sprintf("Inserting edge type: %d/%d", i+1, len(r.edgeTypes)))
 			}
-			if _, err := azc.CreateEdgeType(ctx, et.ID, et.SourceObjectTypeID, et.TargetObjectTypeID, et.TypeName, et.Attributes); err != nil {
+
+			// Pass organization ID from source edge type to preserve it in destination
+			var opts []authz.Option
+			if !et.OrganizationID.IsNil() {
+				opts = append(opts, authz.OrganizationID(et.OrganizationID))
+			}
+
+			if _, err := azc.CreateEdgeType(ctx, et.ID, et.SourceObjectTypeID, et.TargetObjectTypeID, et.TypeName, et.Attributes, opts...); err != nil {
 				spinner.Fail(fmt.Sprintf("Failed to insert edge type: %s", et.ID.String()))
 				return fmt.Errorf("failed to create edge type %s: %w", et.ID.String(), err)
 			}
@@ -331,16 +341,27 @@ func (r *resources) insert(ctx context.Context, azc *authz.Client, verbose bool)
 
 	if len(r.edges) > 0 {
 		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Inserting %d edges...", len(r.edges)))
+		created := 0
+		skipped := 0
 		for i, e := range r.edges {
 			if verbose {
 				spinner.UpdateText(fmt.Sprintf("Inserting edge %d/%d", i+1, len(r.edges)))
 			}
 			if _, err := azc.CreateEdge(ctx, e.ID, e.SourceObjectID, e.TargetObjectID, e.EdgeTypeID); err != nil {
+				// Check if it's an "already exists" error
+				// This can happen when:
+				// 1. Edge with same ID exists but diff check missed it (timing/consistency)
+				// 2. Edge with same (edge_type, source, target) exists with different ID
+				if isAlreadyExistsError(err) {
+					skipped++
+					continue
+				}
 				spinner.Fail("Failed to insert edge: %s", e.ID.String())
 				return fmt.Errorf("failed to create edge %s: %w", e.ID.String(), err)
 			}
+			created++
 		}
-		spinner.Success(fmt.Sprintf("Inserted %d edges", len(r.edges)))
+		spinner.Success(fmt.Sprintf("Inserted %d edges (%d created, %d skipped as duplicates)", len(r.edges), created, skipped))
 	}
 
 	return nil
@@ -514,4 +535,26 @@ func (r *resources) fetchObjects(ctx context.Context, azc *authz.Client) error {
 
 	r.objects = objects
 	return nil
+}
+
+// isAlreadyExistsError checks if an error is an "already exists" error
+func isAlreadyExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return contains(errMsg, "already exists")
+}
+
+// contains checks if a string contains a substring
+func contains(s, substr string) bool {
+	if len(s) < len(substr) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

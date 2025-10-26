@@ -1,6 +1,7 @@
 package context
 
 import (
+	stdcontext "context"
 	"fmt"
 	"os"
 	"sort"
@@ -238,10 +239,18 @@ func (c *ShowCommand) RunE(cmd *cobra.Command, args []string) error {
 	fmt.Printf("URL: %s\n", ctx.URL)
 	fmt.Printf("Client ID: %s\n", ctx.ClientID)
 
-	// Always display the masked client secret value
+	// Display the masked client secret value
 	secretLocationBytes, _ := ctx.ClientSecret.MarshalText()
 	secretLocation := string(secretLocationBytes)
-	fmt.Printf("Client Secret: %s\n", maskSecretWithSuffix(secretLocation))
+
+	// Try to resolve and mask the secret
+	maskedSecret, err := maskSecretWithSuffix(&ctx.ClientSecret)
+	if err != nil {
+		// If we can't resolve, just show the masked location
+		fmt.Printf("Client Secret: ****\n")
+	} else {
+		fmt.Printf("Client Secret: %s\n", maskedSecret)
+	}
 
 	// If it's an external secret, also show the location
 	if secretLocation != "" && !isPlainSecret(secretLocation) {
@@ -281,22 +290,32 @@ func startsWithPrefix(s, prefix string) bool {
 }
 
 // maskSecretWithSuffix masks a secret but shows the last 4 characters for reference
-func maskSecretWithSuffix(location string) string {
-	// For external secrets (env://, aws://, kube://), just show masked
-	if location != "" && !isPlainSecret(location) && !startsWithPrefix(location, "dev-literal://") {
-		return "****"
+func maskSecretWithSuffix(s *secret.String) (string, error) {
+	// Get the secret location to check if it's external
+	secretLocationBytes, _ := s.MarshalText()
+	secretLocation := string(secretLocationBytes)
+
+	// For external secrets (env://, aws://, kube://), resolve them first
+	if secretLocation != "" && !isPlainSecret(secretLocation) && !startsWithPrefix(secretLocation, "dev-literal://") {
+		// Resolve the actual secret value
+		ctx := stdcontext.Background()
+		resolved, err := s.Resolve(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve secret: %w", err)
+		}
+		return maskSecret(resolved), nil
 	}
 
 	// For dev-literal://, strip the prefix and show last 4 chars
-	secret := location
-	if startsWithPrefix(secret, "dev-literal://") {
-		secret = secret[len("dev-literal://"):]
+	secretValue := secretLocation
+	if startsWithPrefix(secretValue, "dev-literal://") {
+		secretValue = secretValue[len("dev-literal://"):]
 	}
 
-	if len(secret) <= 4 {
-		return "****"
+	if len(secretValue) <= 4 {
+		return "****", nil
 	}
-	return "****" + secret[len(secret)-4:]
+	return "****" + secretValue[len(secretValue)-4:], nil
 }
 
 // maskSecret masks all but the last 4 characters of a secret

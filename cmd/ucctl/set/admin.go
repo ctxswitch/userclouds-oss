@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
-	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 
 	"userclouds.com/authz"
@@ -24,11 +23,14 @@ type AdminCommand struct {
 	UserEmail       string
 	UserID          string
 	TenantID        string
+	TenantContext   string
+	TenantCompanyID string
 	CompanyID       string
 	Verbose         bool
 
 	// credentials holds the loaded credentials
-	credentials *common.Credentials
+	credentials       *common.Credentials
+	tenantCredentials *common.Credentials
 }
 
 // RunE executes the set admin command
@@ -47,10 +49,8 @@ func (c *AdminCommand) RunE(cmd *cobra.Command, args []string) error {
 }
 
 func (c *AdminCommand) validate() error {
-	// Load credentials from context or flags
+	// Load console tenant credentials from context or flags (for user lookup)
 	creds, err := common.LoadCredentialsFromContext(
-		
-		
 		c.URL,
 		c.ClientID,
 		c.ClientSecret,
@@ -80,12 +80,28 @@ func (c *AdminCommand) validate() error {
 		return fmt.Errorf("specify only one of --tenant-id or --company-id, not both")
 	}
 
+	// If setting tenant admin, require tenant context and company ID
+	// TODO: This is not my favorite way to approach this, but it does work for now.
+	if c.TenantID != "" {
+		if c.TenantContext == "" {
+			return fmt.Errorf("--tenant-context is required when setting tenant admin")
+		}
+		if c.TenantCompanyID == "" {
+			return fmt.Errorf("--tenant-company-id is required when setting tenant admin (the company that owns this tenant)")
+		}
+
+		// Load tenant credentials for target tenant operations by context name
+		tenantCreds, err := common.LoadCredentialsFromContextName(c.TenantContext, "")
+		if err != nil {
+			return fmt.Errorf("failed to load tenant context credentials: %w", err)
+		}
+		c.tenantCredentials = tenantCreds
+	}
+
 	return nil
 }
 
 func (c *AdminCommand) setAdmin(ctx context.Context) error {
-	spinner, _ := pterm.DefaultSpinner.Start("Initializing...")
-
 	// Get the user ID if email was provided
 	var userID uuid.UUID
 	var err error
@@ -93,50 +109,27 @@ func (c *AdminCommand) setAdmin(ctx context.Context) error {
 	if c.UserEmail != "" {
 		userID, err = c.getUserIDByEmail(ctx)
 		if err != nil {
-			spinner.Fail("Failed to find user by email")
 			return fmt.Errorf("failed to find user by email: %w", err)
-		}
-		if c.Verbose {
-			pterm.Info.Printf("Found user with email %s: %s\n", c.UserEmail, userID)
 		}
 	} else {
 		userID, err = uuid.FromString(c.UserID)
 		if err != nil {
-			spinner.Fail("Invalid user ID")
 			return fmt.Errorf("invalid user ID: %w", err)
 		}
 	}
 
 	// Set admin based on tenant or company
 	if c.TenantID != "" {
-		err = c.setAdminForTenant(ctx, spinner, userID)
+		err = c.setAdminForTenant(ctx, userID)
 	} else {
-		err = c.setAdminForCompany(ctx, spinner, userID)
+		err = c.setAdminForCompany(ctx, userID)
 	}
 
 	if err != nil {
-		spinner.Fail("Failed to set admin privileges")
 		return err
 	}
 
-	spinner.Success("Admin privileges set successfully")
-
-	if c.Verbose {
-		pterm.Println()
-		targetType := "Tenant"
-		targetID := c.TenantID
-		if c.CompanyID != "" {
-			targetType = "Company"
-			targetID = c.CompanyID
-		}
-		pterm.DefaultBox.WithTitle("Admin Privileges Set").WithTitleTopCenter().Println(
-			pterm.Sprintf("User ID: %s\n%s ID: %s\nRole: %s",
-				pterm.LightCyan(userID.String()),
-				targetType,
-				pterm.LightCyan(targetID),
-				pterm.LightCyan(ucauthz.AdminRole)),
-		)
-	}
+	fmt.Printf("Admin privileges set for user %s\n", userID)
 
 	return nil
 }
@@ -148,88 +141,73 @@ func (c *AdminCommand) getUserIDByEmail(ctx context.Context) (uuid.UUID, error) 
 		return uuid.Nil, err
 	}
 
-	// Create IDP management client
+	// Create IDP management client (connects to console tenant by default via context)
 	mgmtClient, err := idp.NewManagementClient(c.credentials.URL, credOpt)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to create IDP client: %w", err)
 	}
 
-	// Search for users by email
-	users, err := mgmtClient.ListUserBaseProfilesAndAuthNForEmail(ctx, c.UserEmail, idp.AuthnTypeOIDC)
+	// Get single user ID by email
+	userID, err := common.GetSingleUserIDByEmail(ctx, mgmtClient, c.UserEmail)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to search for user: %w", err)
-	}
-
-	if len(users) == 0 {
-		// Try password auth as well
-		users, err = mgmtClient.ListUserBaseProfilesAndAuthNForEmail(ctx, c.UserEmail, idp.AuthnTypePassword)
-		if err != nil {
-			return uuid.Nil, fmt.Errorf("failed to search for user: %w", err)
-		}
-	}
-
-	if len(users) == 0 {
-		return uuid.Nil, fmt.Errorf("no user found with email: %s", c.UserEmail)
-	}
-
-	if len(users) > 1 {
-		return uuid.Nil, fmt.Errorf("multiple users found with email: %s, please use --user-id instead", c.UserEmail)
-	}
-
-	userID, err := uuid.FromString(users[0].ID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("invalid user ID from server: %w", err)
+		return uuid.Nil, fmt.Errorf("%w (make sure your context is set to console tenant)", err)
 	}
 
 	return userID, nil
 }
 
-func (c *AdminCommand) setAdminForTenant(ctx context.Context, spinner *pterm.SpinnerPrinter, userID uuid.UUID) error {
-	spinner.UpdateText("Setting admin privileges for tenant...")
-
+func (c *AdminCommand) setAdminForTenant(ctx context.Context, userID uuid.UUID) error {
 	tenantID, err := uuid.FromString(c.TenantID)
 	if err != nil {
 		return fmt.Errorf("invalid tenant ID: %w", err)
 	}
 
-	// Get client credentials
-	credOpt, err := c.credentials.GetClientCredentials()
+	// Parse the company ID that owns this tenant (used as organization ID)
+	tenantCompanyID, err := uuid.FromString(c.TenantCompanyID)
 	if err != nil {
-		return fmt.Errorf("failed to create client credentials: %w", err)
+		return fmt.Errorf("invalid tenant company ID: %w", err)
 	}
 
-	// Create authz client
-	authzClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt), authz.TenantID(tenantID))
+	// Connect to the target tenant
+	tenantCredOpt, err := c.tenantCredentials.GetClientCredentials()
+	if err != nil {
+		return fmt.Errorf("failed to create tenant client credentials: %w", err)
+	}
+
+	// Create authz client for the target tenant using tenant credentials
+	authzClient, err := authz.NewClient(c.tenantCredentials.URL, authz.JSONClient(tenantCredOpt), authz.TenantID(tenantID))
 	if err != nil {
 		return fmt.Errorf("failed to create authz client: %w", err)
 	}
 
-	rbacClient := authz.NewRBACClient(authzClient)
-
-	// Get the user object
-	user, err := rbacClient.GetUser(ctx, userID)
+	// First, ensure the user object exists in this tenant's authz system
+	_, err = authzClient.GetObject(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get user: %w", err)
+		// User object doesn't exist, create it
+		// Create user object with the company ID as organization ID
+		// This is how authz works: the organization ID is the company that owns the tenant
+		_, err = authzClient.CreateObject(ctx, userID, authz.UserObjectTypeID, "", authz.OrganizationID(tenantCompanyID))
+		if err != nil {
+			return fmt.Errorf("failed to create user object: %w", err)
+		}
 	}
 
-	// Get the group (use tenant ID as group ID)
-	group, err := rbacClient.GetGroup(ctx, tenantID)
+	// Create admin edge from user to company (organization)
+	// This is the edge that grants admin privileges in the tenant
+	edgeID, err := uuid.NewV4()
 	if err != nil {
-		return fmt.Errorf("failed to get tenant group: %w", err)
+		return fmt.Errorf("failed to generate edge ID: %w", err)
 	}
 
-	// Add user to group with admin role
-	_, err = group.AddUserRole(ctx, *user, ucauthz.AdminRole)
+	_, err = authzClient.CreateEdge(ctx, edgeID, userID, tenantCompanyID, ucauthz.AdminEdgeTypeID)
 	if err != nil {
-		return fmt.Errorf("failed to add admin role: %w", err)
+		return fmt.Errorf("failed to create admin edge: %w", err)
 	}
 
 	return nil
 }
 
-func (c *AdminCommand) setAdminForCompany(ctx context.Context, spinner *pterm.SpinnerPrinter, userID uuid.UUID) error {
-	spinner.UpdateText("Setting admin privileges for company...")
-
+func (c *AdminCommand) setAdminForCompany(ctx context.Context, userID uuid.UUID) error {
 	companyID, err := uuid.FromString(c.CompanyID)
 	if err != nil {
 		return fmt.Errorf("invalid company ID: %w", err)
@@ -241,9 +219,6 @@ func (c *AdminCommand) setAdminForCompany(ctx context.Context, spinner *pterm.Sp
 		return fmt.Errorf("failed to create client credentials: %w", err)
 	}
 
-	// NOTE: Companies are managed through the console tenant's authz system.
-	// The current context should be set to the console tenant context.
-
 	// Create authz client connected to console tenant
 	authzClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt))
 	if err != nil {
@@ -252,10 +227,27 @@ func (c *AdminCommand) setAdminForCompany(ctx context.Context, spinner *pterm.Sp
 
 	rbacClient := authz.NewRBACClient(authzClient)
 
-	// Get the user (user must exist in console tenant)
+	// First, ensure the user object exists in console tenant's authz system
 	user, err := rbacClient.GetUser(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get user in console tenant: %w", err)
+		// User object doesn't exist in console tenant, create it
+		// Get the company to find its organization ID
+		companyObj, err := authzClient.GetObject(ctx, companyID)
+		if err != nil {
+			return fmt.Errorf("failed to get company object: %w", err)
+		}
+
+		// Create user object with the company's organization ID
+		_, err = authzClient.CreateObject(ctx, userID, authz.UserObjectTypeID, "", authz.OrganizationID(companyObj.OrganizationID))
+		if err != nil {
+			return fmt.Errorf("failed to create user object in console tenant: %w", err)
+		}
+
+		// Now get the user
+		user, err = rbacClient.GetUser(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user after creation: %w", err)
+		}
 	}
 
 	// Get the company group (company is a group in console tenant)

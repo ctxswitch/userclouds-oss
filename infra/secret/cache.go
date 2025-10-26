@@ -31,6 +31,7 @@ func (c *cache) Get(loc string) (string, bool) {
 		return co.Secret, true
 	}
 
+	delete(c.secrets, loc)
 	return "", false
 }
 

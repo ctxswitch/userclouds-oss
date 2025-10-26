@@ -11,12 +11,11 @@ import (
 
 // RedisConfig holds redis connection info
 type RedisConfig struct {
-	Host      string        `json:"host" yaml:"host" validate:"notempty"`
-	Port      int           `json:"port" yaml:"port" validate:"notzero"`
-	DBName    uint8         `json:"dbname" yaml:"dbname"`
-	Username  string        `json:"username" yaml:"username"`
-	Password  secret.String `json:"password" yaml:"password"`
-	EnableTLS bool          `json:"enable_tls" yaml:"enable_tls"`
+	Host     string        `json:"host" yaml:"host" validate:"notempty"`
+	Port     int           `json:"port" yaml:"port" validate:"notzero"`
+	DBName   uint8         `json:"dbname" yaml:"dbname"`
+	Username string        `json:"username" yaml:"username"`
+	Password secret.String `json:"password" yaml:"password"`
 }
 
 func (cfg *RedisConfig) extraValidate() error {

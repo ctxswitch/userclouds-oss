@@ -76,3 +76,11 @@ terragrunt_generated__*.tf
 .k8s-manifests/
 
 **/.yarn/*
+
+.yarnrc.yml
+.pnp.*
+.ui-setup-complete
+
+.idea
+
+vendor/

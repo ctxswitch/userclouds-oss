@@ -100,7 +100,7 @@ func (s *String) Resolve(ctx context.Context) (string, error) {
 		return "", ucerr.Wrap(err)
 	}
 
-	value, err := pv.Get(ctx, px.Value(s.location))
+	value, err := pv.Get(ctx, px.ValueWithParams(s.location))
 	if err != nil {
 		return "", ucerr.Wrap(err)
 	}
@@ -158,7 +158,7 @@ func (s *String) Delete(ctx context.Context) error {
 		return ucerr.Wrap(err)
 	}
 
-	err = pv.Delete(ctx, px.Value(s.location))
+	err = pv.Delete(ctx, px.ValueWithParams(s.location))
 	if err != nil {
 		return ucerr.Wrap(err)
 	}
@@ -210,6 +210,11 @@ func (s String) Validate() error {
 		return nil
 	}
 
+	// support inline secrets with no prefix
+	if !s.HasPrefix() {
+		return nil
+	}
+
 	px, err := prefix.PrefixFromString(s.location)
 	if err != nil {
 		return ucerr.Wrap(err)
@@ -217,6 +222,24 @@ func (s String) Validate() error {
 
 	if err := px.Validate(); err != nil {
 		return ucerr.Wrap(err)
+	}
+
+	// Validate query parameters if present
+	_, params, err := px.ParseParams(s.location)
+	if err != nil {
+		return ucerr.Wrap(err)
+	}
+
+	// Get the provider and validate parameters
+	if len(params) > 0 {
+		pv, err := provider.FromLocation(s.location)
+		if err != nil {
+			return ucerr.Wrap(err)
+		}
+
+		if err := pv.HasValidParams(params); err != nil {
+			return ucerr.Wrap(err)
+		}
 	}
 
 	// passthrough secrets are ok again for this migration

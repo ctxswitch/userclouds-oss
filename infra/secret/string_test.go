@@ -152,11 +152,21 @@ func TestString_Validate(t *testing.T) {
 		input string
 		valid bool
 	}{
-		{"testsecret", "testsecret", false},
+		{"testsecret", "testsecret", true},
 		{"empty", "", true},
 		{"aws://secrets/testsecret", "aws://secrets/testsecret", true},
 		{"kube://secrets/testsecret", "kube://secrets/testsecret", true},
 		{"aws://not-a-secret/testsecret", "aws://not-a-secret/testsecret", false},
+		// Valid query params
+		{"aws with valid profile param", "aws://secrets/testsecret?profile=production", true},
+		{"aws with valid region param", "aws://secrets/testsecret?region=us-west-2", true},
+		{"aws with both profile and region params", "aws://secrets/testsecret?profile=prod&region=us-east-1", true},
+		// Invalid query params
+		{"aws with unsupported param", "aws://secrets/testsecret?invalid=value", false},
+		{"aws with mixed valid and invalid params", "aws://secrets/testsecret?profile=prod&invalid=value", false},
+		{"dev with query params", "dev://testsecret?profile=prod", false},
+		{"env with query params", "env://MY_SECRET?profile=prod", false},
+		{"kube with query params", "kube://secrets/testsecret?namespace=default", false},
 	}
 
 	for _, tt := range tests {
@@ -206,7 +216,7 @@ func TestString_NewString_Kubernetes(t *testing.T) {
 		secret      string
 		fixture     *corev1.Secret
 	}{
-		{"simple creation", "service", "my-secret", "testsecret", "kube://secrets/userclouds/test/service/my-secret", "userclouds.test.service.my-secret", &corev1.Secret{}},
+		{"simple creation", "service", "my-secret", "testsecret", "kube://secrets/userclouds/test/service/my-secret", "userclouds.test.service.my-secret", nil},
 		{"simple update", "service", "my-secret", "testsecret", "kube://secrets/userclouds/test/service/my-secret", "userclouds.test.service.my-secret", &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-secret",
@@ -223,7 +233,12 @@ func TestString_NewString_Kubernetes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			c := fake.NewSimpleClientset(tt.fixture)
+			var c *fake.Clientset
+			if tt.fixture != nil {
+				c = fake.NewSimpleClientset(tt.fixture)
+			} else {
+				c = fake.NewSimpleClientset()
+			}
 			s, err := NewStringWithProvider(ctx, tt.service, tt.name, tt.value, kubernetes.New().WithClient(c))
 			assert.NoError(t, err)
 			assert.Equal(t, tt.location, s.location)

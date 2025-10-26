@@ -2,6 +2,7 @@ package env
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"regexp"
 
@@ -26,6 +27,17 @@ func (p *Provider) Prefix() string {
 
 func (p *Provider) IsDev() bool {
 	return false
+}
+
+// HasValidParams validates that only supported query parameters are present
+// Env provider does not support any query parameters
+func (p *Provider) HasValidParams(params url.Values) error {
+	if len(params) > 0 {
+		for key := range params {
+			return ucerr.Errorf("env provider does not support query parameters (found: %q)", key)
+		}
+	}
+	return nil
 }
 
 // Get returns a secret from an environment variable.

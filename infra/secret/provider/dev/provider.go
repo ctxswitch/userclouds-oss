@@ -3,7 +3,7 @@ package dev
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
+	"net/url"
 
 	"userclouds.com/infra/ucerr"
 )
@@ -42,6 +42,17 @@ func (p *Provider) IsDev() bool {
 	return true
 }
 
+// HasValidParams validates that only supported query parameters are present
+// Dev provider does not support any query parameters
+func (p *Provider) HasValidParams(params url.Values) error {
+	if len(params) > 0 {
+		for key := range params {
+			return ucerr.Errorf("dev provider does not support query parameters (found: %q)", key)
+		}
+	}
+	return nil
+}
+
 // Get is just a passthrough returning the 'path' which is the secret value
 // i.e. dev://<base64_encoded_secret> or dev-literal://<secret>.
 func (p *Provider) Get(ctx context.Context, path string) (string, error) {
@@ -50,7 +61,7 @@ func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 	if p.decode {
 		bs, err := base64.StdEncoding.DecodeString(secret)
 		if err != nil {
-			return "", ucerr.Wrap(fmt.Errorf("base64 decoding failed (%s): %w", path, err))
+			return "", ucerr.Wrap(err)
 		}
 
 		secret = string(bs)

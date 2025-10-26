@@ -79,7 +79,6 @@ terragrunt_generated__*.tf
 
 .pnp.*
 .ui-setup-complete
-
 .idea/
-
+.claude/
 vendor/

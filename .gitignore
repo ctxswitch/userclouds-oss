@@ -77,10 +77,8 @@ terragrunt_generated__*.tf
 
 **/.yarn/*
 
-.yarnrc.yml
 .pnp.*
 .ui-setup-complete
-
-.idea
-
+.idea/
+.claude/
 vendor/

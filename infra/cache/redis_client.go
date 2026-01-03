@@ -21,8 +21,6 @@ import (
 var redisClientsMutex = sync.RWMutex{}
 var redisClients = map[string]*redis.Client{}
 
-var awsCertPool *x509.CertPool
-
 // RedisStatus is the result of checking the connection to to a redis server.
 type RedisStatus struct {
 	Ok    bool   `json:"ok" yaml:"ok"`
@@ -33,11 +31,11 @@ const (
 	certLocation = "/etc/ssl/certs/ca-certificates.crt"
 )
 
-// InitRedisCertForCloud - For cloud envs, where we use TLS to connect to redis, we need to load the AWS root certs
-func InitRedisCertForCloud() error {
+// loadCertPool loads the certs required for TLS connections.
+func loadCertPool() (*x509.CertPool, error) {
 	f, err := os.ReadFile(certLocation)
 	if err != nil {
-		return ucerr.Wrap(err)
+		return nil, ucerr.Wrap(err)
 	}
 
 	cp := x509.NewCertPool()
@@ -56,12 +54,12 @@ func InitRedisCertForCloud() error {
 		// just bypass cert validation altogether. I think this is least bad?
 		input := cryptobyte.String(b.Bytes)
 		if !input.ReadASN1Element(&input, cryptobyte_asn1.SEQUENCE) {
-			return ucerr.New("failed to parse cert")
+			return nil, ucerr.New("failed to parse cert")
 		}
 
 		cert, err := x509.ParseCertificate(input)
 		if err != nil {
-			return ucerr.Errorf("failed to parse cert: %w", err)
+			return nil, ucerr.Errorf("failed to parse cert: %w", err)
 		}
 		cp.AddCert(cert)
 
@@ -70,9 +68,7 @@ func InitRedisCertForCloud() error {
 		}
 	}
 
-	awsCertPool = cp
-
-	return nil
+	return cp, err
 }
 
 // GetRedisClient returns a redis client for the given config either returning one from the cache or creating it.
@@ -139,10 +135,15 @@ func NewRedisClient(ctx context.Context, redisCfg *RedisConfig) (*redis.Client, 
 		options.Username = redisCfg.Username
 		options.Password = pw
 	}
-	if awsCertPool != nil {
+	if redisCfg.EnableTLS {
+		awsCertPool, err := loadCertPool()
+		if err != nil {
+			return nil, ucerr.Wrap(err)
+		}
 		options.TLSConfig = &tls.Config{
 			RootCAs: awsCertPool,
 			// AWS Elasticache Redis only support TLS 1.2 and below
+			// TODO: this may need updating. I think it does support 1.3
 			MinVersion: tls.VersionTLS12,
 		}
 	}

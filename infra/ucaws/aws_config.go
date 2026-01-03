@@ -35,16 +35,17 @@ func NewConfigWithDefaultRegion(ctx context.Context) (aws.Config, error) {
 
 // NewConfigForProfileWithDefaultRegion creates an AWS Config Object that can be used to create clients for AWS services used for when running locally on a dev machine
 func NewConfigForProfileWithDefaultRegion(ctx context.Context, uv universe.Universe) (aws.Config, error) {
-	return NewConfigForProfile(ctx, DefaultRegion, uv)
+	return NewConfigForProfile(ctx, DefaultRegion, string(uv))
 }
 
 // NewConfigForProfile creates an AWS Config Object that can be used to create clients for AWS services used for when running locally on a dev machine
-func NewConfigForProfile(ctx context.Context, region string, uv universe.Universe) (aws.Config, error) {
-	if !uv.IsCloud() {
-		return aws.Config{}, ucerr.Errorf("universe '%v' is not cloud, can't use w/ AWS profile", uv)
-	}
+func NewConfigForProfile(ctx context.Context, region string, profile string) (aws.Config, error) {
+	// TODO: This previously checked to see what type of universe this was.  I'm relaxing that check, but we
+	// should probably reconsider all of the "universe" specific checks to make configuration across all
+	// services flexible in the locations where they can be deployed. This particular change was done to add
+	// local profile support for tooling.
 	// https://aws.github.io/aws-sdk-go-v2/docs/configuring-sdk/#loading-aws-shared-configuration
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region), config.WithSharedConfigProfile(string(uv)))
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region), config.WithSharedConfigProfile(profile))
 	if err != nil {
 		// AWS API calls expect an aws Config object (and not a pointer to one), so we return an empty one here
 		// instead of of changing the method signature to return a pointer to an aws.Config object and then dereferencing it on every AWS API call

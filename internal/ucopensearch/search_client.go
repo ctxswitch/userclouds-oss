@@ -65,7 +65,7 @@ func NewClient(ctx context.Context, searchCfg *Config) (*Client, error) {
 
 // NewClientForLocalTool creates a new opensearch client wrapper given a config for use locally on a dev machine
 func NewClientForLocalTool(ctx context.Context, searchCfg *Config) (*Client, error) {
-	awsCfg, err := ucaws.NewConfigForProfile(ctx, region.GetAWSRegion(searchCfg.Region), universe.Current())
+	awsCfg, err := ucaws.NewConfigForProfile(ctx, region.GetAWSRegion(searchCfg.Region), string(universe.Current()))
 	if err != nil {
 		return nil, ucerr.Friendlyf(err, "error creating AWS config")
 	}

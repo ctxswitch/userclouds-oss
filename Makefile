@@ -180,6 +180,7 @@ test: ## Run backend (Go) tests only
 	UC_UNIVERSE=$(TESTENV) \
 	UC_REGION=mars \
 	UC_TESTDB_POINTER_PATH=$(_TEMPFILE) \
+	UC_SECRET_MANAGER=dev-literal \
 	go test \
 		-race \
 		-coverprofile=cover.out \
@@ -355,6 +356,8 @@ bin/cleanuserstoredata: $(_GO_SRCS)
 bin/setcompanytype: $(_GO_SRCS)
 	go build -o bin/setcompanytype ./cmd/setcompanytype
 
+bin/ucctl:
+	go build -o bin/ucctl ./cmd/ucctl
 
 ######################### code gen binaries #########################
 

@@ -356,6 +356,8 @@ bin/cleanuserstoredata: $(_GO_SRCS)
 bin/setcompanytype: $(_GO_SRCS)
 	go build -o bin/setcompanytype ./cmd/setcompanytype
 
+bin/ucctl:
+	go build -o bin/ucctl ./cmd/ucctl
 
 ######################### code gen binaries #########################
 

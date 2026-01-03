@@ -5,6 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -22,8 +25,9 @@ const (
 )
 
 type Provider struct {
-	client Client
-	region string
+	client  Client
+	region  string
+	profile string
 }
 
 // Provider is a SecretProvider implementation for AWS resources.
@@ -48,20 +52,39 @@ func (p *Provider) IsDev() bool {
 	return false
 }
 
+// HasValidParams validates that only supported query parameters are present
+// Supported parameters: profile, region
+func (p *Provider) HasValidParams(params url.Values) error {
+	supportedParams := map[string]bool{
+		"profile": true,
+		"region":  true,
+	}
+
+	for key := range params {
+		if !supportedParams[key] {
+			return fmt.Errorf("unsupported query parameter %q for AWS provider (supported: profile, region)", key)
+		}
+	}
+
+	return nil
+}
+
 func (p *Provider) Get(ctx context.Context, path string) (string, error) {
+	// Extract query params and get clean path
+	cleanPath := p.extractAndSetParams(path)
+
 	if err := p.initClient(ctx); err != nil {
 		return "", ucerr.Wrap(err)
 	}
 
 	// VersionStage defaults to AWSCURRENT if unspecified
-	input := &secretsmanager.GetSecretValueInput{SecretId: &path, VersionStage: aws.String("AWSCURRENT")}
+	input := &secretsmanager.GetSecretValueInput{SecretId: &cleanPath, VersionStage: aws.String("AWSCURRENT")}
 	// In this sample we only handle the specific exceptions for the 'GetSecretValue' API.
 	// See https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
 	result, err := p.client.GetSecretValue(ctx, input)
 	if err != nil {
-		return "", ucerr.Errorf("failed to load AWS secret '%s' from '%s': %w", path, p.region, err)
+		return "", ucerr.Errorf("failed to load AWS secret '%s' from '%s': %w", cleanPath, p.region, err)
 	}
-	uclog.Debugf(ctx, "Loaded AWS secret '%s' from '%s'", path, p.region)
 	value, err := decodeSecret(result)
 
 	// decode AWS's JSON wrapper if necessary
@@ -77,6 +100,9 @@ func (p *Provider) Get(ctx context.Context, path string) (string, error) {
 }
 
 func (p *Provider) Save(ctx context.Context, path, secret string) error {
+	// Extract query params and get clean path
+	cleanPath := p.extractAndSetParams(path)
+
 	if err := p.initClient(ctx); err != nil {
 		return ucerr.Wrap(err)
 	}
@@ -88,27 +114,30 @@ func (p *Provider) Save(ctx context.Context, path, secret string) error {
 	}
 	js := string(j)
 
-	uclog.Infof(ctx, "creating secret '%s' in AWS", path)
-	_, err = p.client.CreateSecret(ctx, &secretsmanager.CreateSecretInput{Name: &path, SecretString: &js, Tags: getTagsForSecret()})
+	uclog.Infof(ctx, "creating secret '%s' in AWS", cleanPath)
+	_, err = p.client.CreateSecret(ctx, &secretsmanager.CreateSecretInput{Name: &cleanPath, SecretString: &js, Tags: getTagsForSecret()})
 	if err == nil {
 		return nil
 	}
 	var resourceExistsErr *types.ResourceExistsException
 	if errors.As(err, &resourceExistsErr) {
-		uclog.Infof(ctx, "Secret '%s' already exists, updating it instead", path)
-		_, err = p.client.UpdateSecret(ctx, &secretsmanager.UpdateSecretInput{SecretId: &path, SecretString: &js})
+		uclog.Infof(ctx, "Secret '%s' already exists, updating it instead", cleanPath)
+		_, err = p.client.UpdateSecret(ctx, &secretsmanager.UpdateSecretInput{SecretId: &cleanPath, SecretString: &js})
 		return ucerr.Wrap(err)
 	}
 	return ucerr.Wrap(err)
 }
 
 func (p *Provider) Delete(ctx context.Context, path string) error {
+	// Extract query params and get clean path
+	cleanPath := p.extractAndSetParams(path)
+
 	if err := p.initClient(ctx); err != nil {
 		return ucerr.Wrap(err)
 	}
 
-	uclog.Infof(ctx, "Delete secret '%s' in AWS", path)
-	_, err := p.client.DeleteSecret(ctx, &secretsmanager.DeleteSecretInput{SecretId: &path, RecoveryWindowInDays: aws.Int64(DefaultSecretRecoveryWindowInDays)})
+	uclog.Infof(ctx, "Delete secret '%s' in AWS", cleanPath)
+	_, err := p.client.DeleteSecret(ctx, &secretsmanager.DeleteSecretInput{SecretId: &cleanPath, RecoveryWindowInDays: aws.Int64(DefaultSecretRecoveryWindowInDays)})
 	return ucerr.Wrap(err)
 }
 
@@ -117,6 +146,16 @@ func (p *Provider) initClient(ctx context.Context) error {
 		return nil
 	}
 
+	if p.profile != "" {
+		return p.initClientWithProfile(ctx)
+	}
+
+	return p.initClientDefault(ctx)
+}
+
+func (p *Provider) initClientDefault(ctx context.Context) error {
+	// TODO: This should respect p.region if set via query params, similar to initClientWithProfile.
+	// Currently maintaining existing behavior to avoid breaking changes. Need to test and update.
 	cfg, err := ucaws.NewConfigWithDefaultRegion(ctx)
 	if err != nil {
 		return ucerr.Wrap(err)
@@ -124,6 +163,27 @@ func (p *Provider) initClient(ctx context.Context) error {
 
 	p.client = secretsmanager.NewFromConfig(cfg)
 	p.region = cfg.Region
+
+	return nil
+}
+
+func (p *Provider) initClientWithProfile(ctx context.Context) error {
+	// Use region if specified, otherwise use default region
+	region := p.region
+	if region == "" {
+		region = ucaws.DefaultRegion
+	}
+
+	cfg, err := ucaws.NewConfigForProfile(ctx, region, p.profile)
+	if err != nil {
+		return ucerr.Wrap(err)
+	}
+
+	p.client = secretsmanager.NewFromConfig(cfg)
+	// Only set p.region if it wasn't already set from query params
+	if p.region == "" {
+		p.region = cfg.Region
+	}
 
 	return nil
 }
@@ -163,4 +223,40 @@ func getTagsForSecret() []types.Tag {
 		})
 	}
 	return tags
+}
+
+// extractAndSetParams extracts query parameters from the path
+// and sets them on the provider, then returns the clean path without query params.
+// Example: "my-secret?profile=production&region=us-east-1" -> sets p.profile="production", p.region="us-east-1", returns "my-secret"
+// Note: Path should already have the prefix stripped (via ValueWithParams) before being passed here
+func (p *Provider) extractAndSetParams(path string) string {
+	// Check if there are query parameters
+	idx := strings.Index(path, "?")
+	if idx == -1 {
+		// No query parameters, return as-is
+		return path
+	}
+
+	// Split path and query string
+	cleanPath := path[:idx]
+	queryString := path[idx+1:]
+
+	// Parse query parameters
+	params, err := url.ParseQuery(queryString)
+	if err != nil {
+		// If parsing fails, just return the original path
+		return path
+	}
+
+	// Set profile if provided in query params
+	if profile := params.Get("profile"); profile != "" {
+		p.profile = profile
+	}
+
+	// Set region if provided in query params
+	if region := params.Get("region"); region != "" {
+		p.region = region
+	}
+
+	return cleanPath
 }

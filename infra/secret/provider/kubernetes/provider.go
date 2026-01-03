@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"k8s.io/client-go/kubernetes"
@@ -36,6 +37,17 @@ func (p *Provider) Prefix() string {
 
 func (p *Provider) IsDev() bool {
 	return false
+}
+
+// HasValidParams validates that only supported query parameters are present
+// Kubernetes provider does not support any query parameters
+func (p *Provider) HasValidParams(params url.Values) error {
+	if len(params) > 0 {
+		for key := range params {
+			return ucerr.Errorf("kubernetes provider does not support query parameters (found: %q)", key)
+		}
+	}
+	return nil
 }
 
 func (p *Provider) Get(ctx context.Context, path string) (string, error) {

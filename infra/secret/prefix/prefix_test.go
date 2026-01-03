@@ -81,3 +81,130 @@ func TestPrefix_PrefixFromString(t *testing.T) {
 		})
 	}
 }
+
+func TestPrefix_ParseParams(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedPath   string
+		expectedParams map[string]string
+		expectError    bool
+	}{
+		{
+			name:           "no query params",
+			input:          "aws://secrets/my-secret",
+			expectedPath:   "my-secret",
+			expectedParams: map[string]string{},
+			expectError:    false,
+		},
+		{
+			name:         "single query param",
+			input:        "aws://secrets/my-secret?profile=production",
+			expectedPath: "my-secret",
+			expectedParams: map[string]string{
+				"profile": "production",
+			},
+			expectError: false,
+		},
+		{
+			name:         "multiple query params",
+			input:        "aws://secrets/my-secret?profile=production&region=us-west-2",
+			expectedPath: "my-secret",
+			expectedParams: map[string]string{
+				"profile": "production",
+				"region":  "us-west-2",
+			},
+			expectError: false,
+		},
+		{
+			name:           "path with slashes and query params",
+			input:          "aws://secrets/path/to/my-secret?profile=prod",
+			expectedPath:   "path/to/my-secret",
+			expectedParams: map[string]string{"profile": "prod"},
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefix, err := PrefixFromString(tt.input)
+			assert.NoError(t, err)
+
+			path, params, err := prefix.ParseParams(tt.input)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedPath, path)
+				for key, expectedValue := range tt.expectedParams {
+					assert.Equal(t, expectedValue, params.Get(key))
+				}
+			}
+		})
+	}
+}
+
+func TestPrefix_Value_WithQueryParams(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedValue string
+	}{
+		{
+			name:          "no query params",
+			input:         "aws://secrets/my-secret",
+			expectedValue: "my-secret",
+		},
+		{
+			name:          "with query params strips them",
+			input:         "aws://secrets/my-secret?profile=production",
+			expectedValue: "my-secret",
+		},
+		{
+			name:          "multiple query params strips them",
+			input:         "aws://secrets/my-secret?profile=prod&region=us-west-2",
+			expectedValue: "my-secret",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefix, err := PrefixFromString(tt.input)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedValue, prefix.Value(tt.input))
+		})
+	}
+}
+
+func TestPrefix_ParseParams_InvalidQueryString(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectError bool
+	}{
+		{
+			name:        "invalid query string format",
+			input:       "aws://secrets/my-secret?profile=prod&invalid",
+			expectError: false, // url.ParseQuery handles this gracefully
+		},
+		{
+			name:        "empty value is valid",
+			input:       "aws://secrets/my-secret?profile=",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefix, err := PrefixFromString(tt.input)
+			assert.NoError(t, err)
+
+			_, _, err = prefix.ParseParams(tt.input)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

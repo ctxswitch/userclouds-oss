@@ -1,6 +1,9 @@
 package prefix
 
-import "strings"
+import (
+	"net/url"
+	"strings"
+)
 
 type PrefixError string
 
@@ -40,9 +43,39 @@ func (p Prefix) Matches(s string) bool {
 	return strings.HasPrefix(s, string(p))
 }
 
-// Value gets the non-prefixed value of a string
+// Value gets the non-prefixed value of a string, stripping any query parameters
 func (p Prefix) Value(s string) string {
+	value := strings.TrimPrefix(s, string(p))
+	// Strip query parameters if present
+	if idx := strings.Index(value, "?"); idx != -1 {
+		value = value[:idx]
+	}
+	return value
+}
+
+// ValueWithParams gets the non-prefixed value of a string, preserving query parameters
+func (p Prefix) ValueWithParams(s string) string {
 	return strings.TrimPrefix(s, string(p))
+}
+
+// ParseParams extracts query parameters from a prefixed string
+// Returns the path and the parsed query parameters
+func (p Prefix) ParseParams(s string) (string, url.Values, error) {
+	value := strings.TrimPrefix(s, string(p))
+
+	// Check if there are query parameters
+	if idx := strings.Index(value, "?"); idx != -1 {
+		path := value[:idx]
+		queryString := value[idx+1:]
+		params, err := url.ParseQuery(queryString)
+		if err != nil {
+			return "", nil, err
+		}
+		return path, params, nil
+	}
+
+	// No query parameters
+	return value, url.Values{}, nil
 }
 
 func (p Prefix) String() string {

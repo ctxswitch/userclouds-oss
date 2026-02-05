@@ -21,6 +21,8 @@ SERVICE_BINARIES = bin/console bin/plex bin/idp bin/authz bin/checkattribute bin
 CODEGEN_BINARIES = bin/parallelgen bin/genconstant bin/gendbjson bin/genvalidate bin/genstringconstenum bin/genorm bin/genschemas bin/genevents bin/genrouting bin/genhandler bin/genopenapi bin/genpageable
 TOOL_BINARIES = bin/automatedprovisioner bin/azcli bin/cachelookup bin/cachetool bin/cleanplextokens bin/provision bin/setcompanytype bin/tenantcopy bin/ucctl
 
+INSTALL_PLAYWRIGHT ?= "true"
+
 TF_PATH = $(if $(TG_TF_PATH),$(TG_TF_PATH),"terraform")
 
 LOCALBIN ?= $(shell pwd)/bin
@@ -81,6 +83,9 @@ codegen-serial: $(CODEGEN_BINARIES) ## Run codegen to update generated files
 # TODO: move away from local tooling as a supported option
 TOOL_DEPS=jq yq direnv bash curl git-lfs hub awscli n yarn postgresql@14 tmux \
 	restack python3 terraform tflint terragrunt redis gh \
+TOOL_DEPS=jq yq direnv bash curl git-lfs hub awscli n yarn tmux uv \
+	restack python3 terraform tflint terragrunt gh \
+>>>>>>> main
 	helm kubernetes-cli kubeconform argocd docker \
 	coreutils # for timeout (used in redis-shell.sh)
 check-deps:
@@ -115,6 +120,14 @@ clean:
 # TODO: we actually shouldn't source devenv.sh in CI, but since CI runs sh (not bash) it doesn't actually hurt
 # TODO: should UI tests get pulled out to a separate target at some point? We could have `make servertest`, `make uitest`,
 #  and `make test` can just depend on both (so then TESTARGS would only apply to `make servertest`).
+    # ui setup marker
+	-rm -f .ui-setup-complete
+
+######################## test runner ######################
+# TODO: Most of the CI assumptions have been stripped out since they would have been
+# environment specific.  Revisit the test runner or set the expectation that end users
+# are expected to adapt their own runners.
+>>>>>>> main
 # Use TESTARGS to run to eg. a specific test / package tests, `TESTARGS=./idp/internal/authn make test`
 #  or `TESTARGS="./plex/internal -run TestCaseFoo"` make test for a single test
 .PHONY: test
@@ -122,25 +135,56 @@ test: TESTARGS ?= ./...
 test: TESTENV ?= test   # CI uses this to override UC_UNIVERSE
 test: _TEMPDIR := $(shell mktemp -d)
 test: _TEMPFILE := $(_TEMPDIR)/testdb
-test: _TESTDB_STOP = docker rm -f testdb
-test: ## Build project and run test suite
-	@tools/setup-test-db.sh $(_TEMPFILE)
-	@if [ "$(strip $(TESTENV))" == "test" ]; then\
-		tools/start-redis.sh;\
-	else\
-		echo "skipping redis because TESTENV was specified ($(TESTENV))";\
+test: _TESTDBDIR := $(shell mktemp -d)
+test: _TESTDBCONN := $(_TESTDBDIR)/connfile
+test: _COMPOSE_FILE := docker/test/docker-compose.yaml
+test: _DOCKER_UP := docker compose -f $(_COMPOSE_FILE) up postgres mysql redis --detach --wait
+test: _DOCKER_DOWN := docker compose -f $(_COMPOSE_FILE) down
+test: ## Run backend (Go) tests only
+	@if [ "$(strip $(TESTENV))" == "test" ]; then \
+		echo "postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable" >$(_TESTDBCONN) && echo $(_TESTDBDIR) >$(_TEMPFILE); \
+		cat $(_TEMPFILE); \
+	else \
+		echo "skipping setup because TESTENV was specified ($(TESTENV))"; \
 	fi
-	UC_UNIVERSE=$(TESTENV) UC_REGION=mars UC_TESTDB_POINTER_PATH=$(_TEMPFILE) go test \
-	         -race \
-			 -coverprofile=cover.out \
-			 -vet=off \
-			 $(TESTARGS) || ( $(_TESTDB_STOP) && exit 1)
-	@$(_TESTDB_STOP)
-	@if [ "$(strip $(TESTARGS))" == './...' ]; then\
-		make consoleui-test;\
-	else\
-		echo "skipping UI tests because TESTARGS was specified ($(TESTARGS))";\
-	fi
+	@$(_DOCKER_UP)
+	UC_CONFIG_DIR=${PWD}/config \
+	UC_UNIVERSE=$(TESTENV) \
+	UC_REGION=mars \
+	UC_TESTDB_POINTER_PATH=$(_TEMPFILE) \
+	UC_SECRET_MANAGER=dev-literal \
+	go test \
+		-race \
+		-coverprofile=cover.out \
+		-vet=off \
+		-ldflags="-s -w" \
+		$(TESTARGS)  2>&1 | grep -v "has malformed LC_DYSYMTAB" || ( @$(_DOCKER_DOWN) && exit 1)
+	@$(_DOCKER_DOWN)
+
+.PHONY: testui
+testui:
+	make testui-unit
+	make testui-func
+
+.PHONY: testui-unit
+testui-unit: .ui-setup-complete
+	make sharedui/build ui-lib/build
+	CI=1 yarn workspace @userclouds/consoleui test:unit
+
+.PHONY: testui-func
+testui-func: _COMPOSE_FILE := docker/test/docker-compose.yaml
+testui-func: _DOCKER_UP := docker compose -f $(_COMPOSE_FILE) up -d consoleui --wait
+testui-func: _DOCKER_DOWN := docker compose -f $(_COMPOSE_FILE) down
+testui-func: .ui-setup-complete
+	@$(_DOCKER_UP)
+	CI=1 PORT=3057 yarn workspace @userclouds/consoleui test:func || \
+		(@$(_DOCKER_DOWN) && exit 1)
+	@$(_DOCKER_DOWN)
+
+.PHONY: test-all
+test-all: ## Run all tests (backend + UI)
+	make test
+	make testui
 
 # Very similar target to the "test" target above that we will use in CI
 # few chnages from the regular test target:
@@ -236,6 +280,42 @@ $(SERVICE_BINARIES): $(_GO_SRCS)
 ######################### tool binaries ##########################
 $(TOOL_BINARIES): $(_GO_SRCS)
 	CGO_CXXFLAGS="-w" go build --trimpath -o $@ -ldflags "-s -w" ./cmd/$(notdir $@)
+bin/ucconfig: $(_GO_SRCS)
+	go build -o bin/ucconfig ./cmd/ucconfig
+
+bin/opensearch: $(_GO_SRCS)
+	go build -o bin/opensearch ./cmd/opensearch
+
+bin/devbox: $(_GO_SRCS)
+	go build -o bin/devbox ./cmd/devbox
+
+bin/devlb: $(_GO_SRCS)
+	go build -o bin/devlb ./cmd/devlb
+
+bin/azcli: $(_GO_SRCS)
+	go build -o bin/azcli ./cmd/azcli
+
+bin/cachelookup: $(_GO_SRCS)
+	go build -o bin/cachelookup ./cmd/cachelookup
+
+bin/cachetool: $(_GO_SRCS)
+	go build -o bin/cachetool ./cmd/cachetool
+
+bin/provisiontenanturls: $(_GO_SRCS)
+	go build -o bin/provisiontenanturls ./cmd/provisiontenanturls
+
+bin/cleanplextokens: $(_GO_SRCS)
+	go build -o bin/cleanplextokens ./cmd/cleanplextokens
+
+bin/cleanuserstoredata: $(_GO_SRCS)
+	go build -o bin/cleanuserstoredata ./cmd/cleanuserstoredata
+
+bin/setcompanytype: $(_GO_SRCS)
+	go build -o bin/setcompanytype ./cmd/setcompanytype
+
+bin/ucctl:
+	go build -o bin/ucctl ./cmd/ucctl
+>>>>>>> main
 
 ######################### code gen binaries #########################
 $(CODEGEN_BINARIES): $(_GO_SRCS)
@@ -243,6 +323,15 @@ $(CODEGEN_BINARIES): $(_GO_SRCS)
 	go build -o $@ ./cmd/$(notdir $@)
 
 ######################### react ui stuff #########################
+.ui-setup-complete: package.json yarn.lock console/consoleui/package.json
+	uv python install 3.12
+	npm install -g corepack
+	uv run yarn install
+	@tools/install-playwright.sh
+	@touch .ui-setup-complete
+
+.PHONY: ui-setup
+ui-setup: .ui-setup-complete ## Run UI setup (yarn + playwright)
 
 # Install/update dependencies (node modules) in development environments. This creates/updates the `node_modules`
 # directories wherever there are `package.json` files in our tree, and creates/updates the `yarn.lock` file
@@ -257,7 +346,7 @@ ui-yarn-install: ## Install/update dependencies for our React UI projects (neede
 # Install dependencies and reqs needed to build UI bundles and run UI tests (playwright) in CI.
 .PHONY: ui-yarn-ci
 ui-yarn-ci:
-	time yarn install --immutable
+	time uv run yarn install --immutable
 	time tools/install-playwright.sh
 
 # Install/update dependencies (node modules) in CI / Build pipelines for UI apps & libraries.
@@ -267,7 +356,7 @@ ui-yarn-ci:
 # https://stackoverflow.com/questions/52499617/what-is-the-difference-between-npm-install-and-npm-ci
 # and https://stackoverflow.com/questions/58482655/what-is-the-closest-to-npm-ci-in-yarn
 ui-yarn-build-only-ci:
-	time yarn install --immutable
+	time uv run yarn install --immutable
 
 sharedui/build: $(_SHAREDUI_REACT_SRCS)
 	@rm -rf sharedui/build
@@ -296,6 +385,7 @@ ui-clean: ## Clean the output (build) dirs of our React UI projects
 ui-yarn-clean: ui-clean ## Clean yarn generated/downloaded files. Must re-run `make ui-yarn-install` after
 	@rm -rf node_modules sharedui/node_modules ui-component-lib/node_modules console/consoleui/node_modules plex/plexui/node_modules
 	@rm -rf yarn.lock sharedui/yarn.lock ui-component-lib/yarn.lock console/consoleui/yarn.lock plex/plexui/yarn.lock
+	@rm -rf .ui-setup-complete
 
 .PHONY: sharedui-dev
 sharedui-dev: ## Run the React rollup server in watch mode for 'sharedui'
@@ -316,11 +406,6 @@ consoleui-dev: sharedui/build ## Run the React development server for 'consoleui
 .PHONY: plexui-dev
 plexui-dev: sharedui/build ## Run the React development server for 'plexui'
 	BROWSER=none yarn plexui:dev
-
-.PHONY: consoleui-test
-consoleui-test: ## Run the tests for 'consoleui'
-	make sharedui/build ui-lib/build
-	CI=1 yarn consoleui:test
 
 .PHONY: ui-dev
 ui-dev: ## Run the dev backend + react dev server for plex & console
@@ -416,6 +501,54 @@ bin/auditlogview: $(_GO_SRCS)
 bin/remoteuserregionconfig: $(_GO_SRCS)
 	go build -o bin/remoteuserregionconfig ./cmd/remoteuserregionconfig
 
+install-tools:
+	brew install $(TOOL_DEPS)
+############################ initial dev setup ###########################
+# this stuff should be idempotent...in theory
+
+# NB: we actually run brew install here (rather than just a check-deps dependency) so that
+# we're keeping our dev environments up to date-ish :)
+# We also set up userclouds_dev_root to keep dev closer to matching our config in AWS,
+# rather than relying on the local root account to have all permissions
+# NBB: we create and then drop a "fake" table in defaultdb to ensure GRANT ... on defaultdb.*
+# works even if you don't have any tables there (new install). We keep this GRANT around
+# in case you have existing tables (specifically migrations) that our userclouds subaccount
+# needs access to (this shouldn't happen after we transitioned to rootdb but maybe?)
+# We use dockerized redis here for Devin since for some reason local redis doesn't work there
+.PHONY: devsetup
+devsetup: bin/testdevcert install-tools
+devsetup: ## Initial setup when you clone the repo
+	mkdir -p ~/.n
+	n $(shell cat .node-version | cut -c2-)
+	tools/git/install.sh
+	echo "CREATE USER userclouds_dev_root WITH CREATEDB CREATEROLE;" | psql postgres
+	echo "CREATE DATABASE defaultdb;" | psql postgres
+	echo "GRANT ALL PRIVILEGES ON DATABASE defaultdb TO userclouds_dev_root;" | psql postgres
+	echo "CREATE TABLE tmp (id UUID);" | psql postgres
+	echo "DROP TABLE tmp;" | psql postgres
+	make provision-dev
+	make ui-install ensure-secrets-dev
+	cd terraform; tflint --init
+	bin/testdevcert || (echo "ERROR: please see README for instructions on installing the dev HTTPS certificate"; exit 1)
+	@echo "!!!!!!!!!!"
+	@echo "IMPORTANT: to make yourself a UserClouds company admin, run \`tools/make-company-admin.sh dev '<youruserid>'\`"
+	@echo "after creating an account on console (your user ID can be found in the upper right profile menu)"
+	@echo "!!!!!!!!!!"
+
+.PHONY: devsetup-samples
+devsetup-samples: bin/provision ## Setup your environment to run our sample projects
+	echo "create database sample_events; create user userclouds_events with password 'samples'; GRANT ALL PRIVILEGES ON DATABASE sample_events TO userclouds_events;" | psql postgres
+	bin/provision provision company config/provisioning/samples/company_contoso.json
+	bin/provision provision tenant config/provisioning/samples/tenant_contoso_dev.json
+	bin/provision provision tenant config/provisioning/samples/tenant_contoso_prod.json
+	bin/provision provision company config/provisioning/samples/company_allbirds.json
+	bin/provision provision tenant config/provisioning/samples/tenant_allbirds_dev.json
+	bin/provision provision tenant config/provisioning/samples/tenant_allbirds_prod.json
+
+############################ samples ###########################
+
+# run devsetup-samples first; we don't depend on it explicitly because it's sloooow
+>>>>>>> main
 .PHONY:
 build-deploy-binaries: $(SERVICE_BINARIES) bin/consoleuiinitdata
 	echo "Built binaries for deployment"
@@ -424,6 +557,21 @@ build-deploy-binaries: $(SERVICE_BINARIES) bin/consoleuiinitdata
 gen-openapi-spec: ## Generate the consolidated OpenAPI spec for our APIs
 	go run cmd/genopenapi/main.go
 
+###
+### TODO: OOOOFFFFFF
+###
+configure-aws-cli:  ## configures AWS CLI for use w/ SSO
+	./tools/configure-aws-cli.sh
+
+.PHONY:
+ensure-secrets-dev: ## Make sure the secrets needed to run local dev environment are present
+	UC_UNIVERSE=debug tools/ensure-aws-auth.sh
+	go run cmd/ensuresecrets/main.go
+	direnv reload # need to reload direnv to pick up new secrets
+	aws sso logout # Don't stay logged into AWS SSO
+
+
+>>>>>>> main
 .PHONY: tf-provider-build
 tf-provider-build: ## Build the Terraform provider
 	$(MAKE) -C ./public-repos/terraform-provider-userclouds build

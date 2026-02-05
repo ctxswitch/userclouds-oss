@@ -33,6 +33,7 @@ type UserCommand struct {
 	OIDCSubject     string
 	Verbose         bool
 
+	// credentials holds the loaded credentials
 	credentials *common.Credentials
 }
 
@@ -52,15 +53,23 @@ func (c *UserCommand) RunE(cmd *cobra.Command, args []string) error {
 }
 
 func (c *UserCommand) validate() error {
+	// Organization is required.
 	if c.OrganizationID == "" {
 		return fmt.Errorf("organization id is required")
 	}
 
-	var err error
-	c.credentials, err = common.LoadAndSetCredentials(c.URL, c.ClientID, c.ClientSecret, c.ClientSecretVar)
+	// Load credentials from context or flags
+	creds, err := common.LoadCredentialsFromContext(
+		c.URL,
+		c.ClientID,
+		c.ClientSecret,
+		c.ClientSecretVar,
+		"", // configPath - use default precedence
+	)
 	if err != nil {
 		return err
 	}
+	c.credentials = creds
 
 	// Validate authentication method (optional - can create user without authn)
 	hasPassword := c.Username != "" && c.Password != ""
@@ -86,9 +95,16 @@ func (c *UserCommand) validate() error {
 }
 
 func (c *UserCommand) createUser(ctx context.Context) error {
-	mgmtClient, err := c.credentials.NewManagementClient()
+	// Create client credentials option
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create client credentials: %w", err)
+	}
+
+	// Create IDP management client
+	mgmtClient, err := idp.NewManagementClient(c.credentials.URL, credOpt)
+	if err != nil {
+		return fmt.Errorf("failed to create IDP client: %w", err)
 	}
 
 	// Build user profile

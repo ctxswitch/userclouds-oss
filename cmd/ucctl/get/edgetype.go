@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/spf13/cobra"
+	"userclouds.com/authz"
 	"userclouds.com/cmd/ucctl/common"
 )
 
@@ -17,6 +18,7 @@ type EdgeTypeCommand struct {
 	ClientSecretVar string
 	AuthnType       string
 
+	// credentials holds the loaded credentials
 	credentials *common.Credentials
 }
 
@@ -30,21 +32,40 @@ func (c *EdgeTypeCommand) RunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid edge type ID: %w", err)
 	}
 
-	c.credentials, err = common.LoadAndSetCredentials(c.URL, c.ClientID, c.ClientSecret, c.ClientSecretVar)
+	// Load credentials from context or flags
+	creds, err := common.LoadCredentialsFromContext(
+		
+		
+		c.URL,
+		c.ClientID,
+		c.ClientSecret,
+		c.ClientSecretVar,
+		"", // configPath - use default precedence
+	)
 	if err != nil {
 		return err
 	}
+	c.credentials = creds
 
-	azClient, err := c.credentials.NewAuthzClient()
+	// Create client credentials option
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create client credentials: %w", err)
 	}
 
+	// Create AuthZ client
+	azClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt))
+	if err != nil {
+		return fmt.Errorf("failed to create AuthZ client: %w", err)
+	}
+
+	// Get the edge type
 	edgeType, err := azClient.GetEdgeType(cmd.Context(), edgeTypeID)
 	if err != nil {
 		return fmt.Errorf("failed to get edge type: %w", err)
 	}
 
+	// Display the edge type
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 	fmt.Fprintln(w, "ID\tTYPE_NAME\tSOURCE_TYPE_ID\tTARGET_TYPE_ID\tORGANIZATION_ID\tCREATED\tUPDATED")
 	fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/spf13/cobra"
+	"userclouds.com/authz"
 	"userclouds.com/cmd/ucctl/common"
 	"userclouds.com/infra/ucerr"
 )
@@ -40,14 +41,31 @@ func (c *ObjectCommand) RunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot specify both --alias and --clear-alias")
 	}
 
-	c.credentials, err = common.LoadAndSetCredentials(c.URL, c.ClientID, c.ClientSecret, c.ClientSecretVar)
+	// Load credentials from context or flags
+	creds, err := common.LoadCredentialsFromContext(
+		
+		
+		c.URL,
+		c.ClientID,
+		c.ClientSecret,
+		c.ClientSecretVar,
+		"", // configPath - use default precedence
+	)
 	if err != nil {
 		return err
 	}
+	c.credentials = creds
 
-	azClient, err := c.credentials.NewAuthzClient()
+	// Create client credentials option
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create client credentials: %w", err)
+	}
+
+	// Create AuthZ client
+	azClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt))
+	if err != nil {
+		return fmt.Errorf("failed to create AuthZ client: %w", err)
 	}
 
 	// Prepare alias value

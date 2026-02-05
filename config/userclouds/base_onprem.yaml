@@ -1,0 +1,27 @@
+company_db:
+  user: postgres
+  dbname: companyconfig
+  host: localhost
+  dbdriver: postgres
+  dbproduct: postgres
+  port: 5432
+
+cache:
+  redis_caches:
+    - region: customerlocal
+      host: localhost
+      port: 6379
+      dbname: 0
+
+logger:
+  transports:
+    - type: file
+      base_filename: /tmp/
+      transportconfig:
+        required: true
+        max_log_level: 5
+    - type: goLogJSON
+      transportconfig:
+        required: true
+        max_log_level: 4
+      supports_color: false

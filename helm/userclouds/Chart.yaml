@@ -1,5 +1,0 @@
-apiVersion: v2
-name: userclouds
-description: A Helm chart for running the UserClouds services in Kubernetes (EKS)
-type: application
-version: 0.64.0

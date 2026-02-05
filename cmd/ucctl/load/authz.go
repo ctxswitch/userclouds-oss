@@ -38,15 +38,28 @@ type AuthzDump struct {
 func (c *AuthzCommand) RunE(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	var err error
-	c.credentials, err = common.LoadAndSetCredentials(c.URL, c.ClientID, c.ClientSecret, c.ClientSecretVar)
+	// Load credentials
+	creds, err := common.LoadCredentialsFromContext(
+		c.URL,
+		c.ClientID,
+		c.ClientSecret,
+		c.ClientSecretVar,
+		"",
+	)
 	if err != nil {
 		return err
 	}
+	c.credentials = creds
 
-	authzClient, err := c.credentials.NewAuthzClient()
+	credOpt, err := c.credentials.GetClientCredentials()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create client credentials: %w", err)
+	}
+
+	// Create AuthZ client
+	authzClient, err := authz.NewClient(c.credentials.URL, authz.JSONClient(credOpt))
+	if err != nil {
+		return fmt.Errorf("failed to create authz client: %w", err)
 	}
 
 	// Read dump file
